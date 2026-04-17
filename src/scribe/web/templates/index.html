@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Scribe -- New Project{% endblock %}
+
+{% block content %}
+<form action="/create" method="POST" enctype="multipart/form-data">
+
+    <!-- Project Settings -->
+    <div class="card">
+        <h2>Project Settings</h2>
+        <div class="form-row">
+            <label for="project_name">Project Name</label>
+            <input type="text" id="project_name" name="project_name" placeholder="e.g. ADIEM Chapter 3" required>
+        </div>
+        <div class="form-row">
+            <label for="output_folder">Output Folder</label>
+            <input type="text" id="output_folder" name="output_folder" placeholder="e.g. C:\Users\David\Documents\my_chapter" required>
+            <p class="hint">Full path where the project will be created. A new folder will be made if it doesn't exist.</p>
+        </div>
+        <div class="form-row-inline">
+            <div>
+                <label for="default_depth">Default Depth</label>
+                <select id="default_depth" name="default_depth">
+                    <option value="skim">Skim</option>
+                    <option value="standard" selected>Standard</option>
+                    <option value="deep">Deep</option>
+                    <option value="rigorous">Rigorous</option>
+                </select>
+            </div>
+            <div>
+                <label for="parallelism">Parallel Chunks</label>
+                <input type="number" id="parallelism" name="parallelism" value="3" min="1" max="10">
+            </div>
+        </div>
+        <div class="form-row">
+            <label class="checkbox-label">
+                <input type="checkbox" name="suggest_visuals" checked>
+                Suggest visual placements (charts, diagrams)
+            </label>
+        </div>
+    </div>
+
+    <!-- Document Upload -->
+    <div class="card">
+        <h2>Document Outline <span class="badge">Required</span></h2>
+        <div class="form-row">
+            <label for="outline">Upload your outline (.md file)</label>
+            <input type="file" id="outline" name="outline" accept=".md,.txt,.markdown" required>
+            <p class="hint">Markdown file with headings and bullet points. Use [depth:deep], [ref:path], [web] tags to control generation.</p>
+        </div>
+    </div>
+
+    <!-- Style Guide -->
+    <div class="card">
+        <h2>Style Guide</h2>
+        <div class="radio-group">
+            <label>
+                <input type="radio" name="style_choice" value="builtin" checked onchange="toggleStyleUpload()">
+                Use built-in academic style
+            </label>
+            <label>
+                <input type="radio" name="style_choice" value="upload" onchange="toggleStyleUpload()">
+                Upload custom style guide
+            </label>
+        </div>
+        <div id="style_upload_area" style="display: none;">
+            <div class="form-row">
+                <label for="style_guide">Custom style guide (.md file)</label>
+                <input type="file" id="style_guide" name="style_guide" accept=".md,.txt,.markdown">
+                <p class="hint">Define voice, rules, citation format, and hard prohibitions.</p>
+            </div>
+        </div>
+        <div id="style_builtin_info">
+            <p class="hint">
+                Built-in style: British English, concise active voice, Harvard citations, no em dashes, no AI tells.
+                Academic writing rules (Williams, Pinker, Sword, Schimel, Strunk & White, Zinsser) are always applied.
+            </p>
+        </div>
+    </div>
+
+    <!-- Reference Materials -->
+    <div class="card">
+        <h2>Reference Materials <span class="badge" style="background: var(--surface2); color: var(--text-dim);">Optional</span></h2>
+        <div class="form-row">
+            <label for="refs">Upload source documents</label>
+            <input type="file" id="refs" name="refs" multiple accept=".pdf,.docx,.xlsx,.md,.txt,.csv">
+            <p class="hint">PDF, DOCX, XLSX, MD, TXT, CSV. The planner will decide which refs to use for each chunk. Hold Ctrl/Cmd to select multiple files.</p>
+        </div>
+    </div>
+
+    <!-- Submit -->
+    <div class="actions">
+        <button type="submit" class="btn btn-primary">Create Project</button>
+    </div>
+
+</form>
+
+<script>
+function toggleStyleUpload() {
+    const choice = document.querySelector('input[name="style_choice"]:checked').value;
+    document.getElementById('style_upload_area').style.display = choice === 'upload' ? 'block' : 'none';
+    document.getElementById('style_builtin_info').style.display = choice === 'builtin' ? 'block' : 'none';
+}
+</script>
+{% endblock %}

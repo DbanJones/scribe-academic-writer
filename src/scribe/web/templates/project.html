@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}Scribe -- {{ info.project_name }}{% endblock %}
+
+{% block content %}
+
+<!-- Project Header -->
+<div class="card">
+    <h2>{{ info.project_name }}</h2>
+    <p class="hint" style="margin-bottom: 1rem;">{{ info.root }}</p>
+
+    <div class="stat-grid">
+        <div class="stat-card">
+            <div class="value">{{ info.ref_count }}</div>
+            <div class="label">References</div>
+        </div>
+        <div class="stat-card">
+            <div class="value">{% if plan %}{{ plan.estimated_chunks }}{% else %}-{% endif %}</div>
+            <div class="label">Chunks</div>
+        </div>
+        <div class="stat-card">
+            <div class="value">{% if plan %}{{ "{:,}".format(plan.estimated_words) }}{% else %}-{% endif %}</div>
+            <div class="label">Est. Words</div>
+        </div>
+        <div class="stat-card">
+            <div class="value">{% if final_words %}{{ "{:,}".format(final_words) }}{% else %}-{% endif %}</div>
+            <div class="label">Final Words</div>
+        </div>
+    </div>
+</div>
+
+<!-- Run Controls -->
+<div class="card">
+    <h2>Run Pipeline
+        <span class="status-badge status-{{ run_state.status }}">{{ run_state.status }}</span>
+    </h2>
+
+    {% if run_state.status in ['idle', 'done', 'error'] %}
+    <form action="/run" method="POST" style="margin-bottom: 1rem;">
+        <input type="hidden" name="project_dir" value="{{ info.root }}">
+        <div class="form-row">
+            <label class="checkbox-label">
+                <input type="checkbox" name="skip_review" checked>
+                Skip review step (auto-approve plan)
+            </label>
+        </div>
+        <button type="submit" class="btn btn-primary" id="run-btn">
+            {% if info.final_exists %}Re-run Pipeline{% else %}Run Pipeline{% endif %}
+        </button>
+    </form>
+    {% endif %}
+
+    {% if run_state.status not in ['idle'] %}
+    <div style="margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.25rem;">
+            <span id="status-msg">{{ run_state.message }}</span>
+            <span id="status-pct">{{ run_state.progress }}%</span>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill {% if run_state.status == 'done' %}done{% endif %}"
+                 id="progress-fill"
+                 style="width: {{ run_state.progress }}%"></div>
+        </div>
+        {% if run_state.chunks_total > 0 %}
+        <p class="hint" id="chunks-info">
+            Chunks: <span id="chunks-done">{{ run_state.chunks_done }}</span> / {{ run_state.chunks_total }} done
+        </p>
+        {% endif %}
+    </div>
+
+    <!-- Log -->
+    <div class="log-box" id="log-box">
+        {% for line in run_state.log %}
+        <p>{{ line }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if run_state.status == 'error' and run_state.error %}
+    <div class="flash flash-error" style="margin-top: 1rem;">
+        {{ run_state.error[:500] }}
+    </div>
+    {% endif %}
+
+    {% if run_state.status == 'done' and run_state.final_path %}
+    <div class="flash flash-success" style="margin-top: 1rem;">
+        Document complete: {{ "{:,}".format(run_state.final_words) }} words at {{ run_state.final_path }}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Plan Details -->
+{% if plan %}
+<div class="card">
+    <h2>Plan</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Depth</th>
+                <th>Words</th>
+                <th>Sources</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for chunk in plan.chunks %}
+            <tr>
+                <td><span class="tag">{{ chunk.id }}</span></td>
+                <td>{{ chunk.title }}</td>
+                <td><span class="tag">{{ chunk.depth.value }}</span></td>
+                <td>{{ "{:,}".format(chunk.words) }}</td>
+                <td>{{ chunk.sources | length }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% if plan.gaps %}
+    <div style="margin-top: 1rem;">
+        <h2 style="font-size: 0.95rem; color: var(--warning);">Gaps ({{ plan.gaps | length }})</h2>
+        {% for g in plan.gaps %}
+        <p class="hint" style="margin-top: 0.25rem;">* {{ g.bullet }} -- {{ g.issue }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Upload More Refs -->
+<div class="card">
+    <h2>Reference Files</h2>
+    {% if info.refs %}
+    <div style="margin-bottom: 1rem;">
+        {% for ref in info.refs %}
+        <span class="tag" style="margin: 0.15rem;">{{ ref }}</span>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="hint" style="margin-bottom: 1rem;">No reference files uploaded yet.</p>
+    {% endif %}
+
+    <form action="/upload_refs" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="project_dir" value="{{ info.root }}">
+        <div class="form-row">
+            <input type="file" name="refs" multiple accept=".pdf,.docx,.xlsx,.md,.txt,.csv">
+        </div>
+        <button type="submit" class="btn btn-secondary">Upload References</button>
+    </form>
+</div>
+
+<!-- Navigation -->
+<div class="actions">
+    <a href="/" class="btn btn-secondary">New Project</a>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Poll for status updates while running
+let polling = null;
+
+function startPolling() {
+    if (polling) return;
+    polling = setInterval(async () => {
+        try {
+            const resp = await fetch('/status');
+            const data = await resp.json();
+
+            document.getElementById('status-msg').textContent = data.message;
+            document.getElementById('status-pct').textContent = data.progress + '%';
+            document.getElementById('progress-fill').style.width = data.progress + '%';
+
+            const chunksDone = document.getElementById('chunks-done');
+            if (chunksDone) chunksDone.textContent = data.chunks_done;
+
+            // Update log
+            const logBox = document.getElementById('log-box');
+            if (logBox && data.log) {
+                logBox.innerHTML = data.log.map(l => '<p>' + l + '</p>').join('');
+                logBox.scrollTop = logBox.scrollHeight;
+            }
+
+            // Progress bar color
+            const fill = document.getElementById('progress-fill');
+            if (data.status === 'done') {
+                fill.classList.add('done');
+            }
+
+            // Stop polling when done or error
+            if (data.status === 'done' || data.status === 'error' || data.status === 'idle') {
+                clearInterval(polling);
+                polling = null;
+                // Reload page to show final state
+                if (data.status === 'done' || data.status === 'error') {
+                    setTimeout(() => location.reload(), 1000);
+                }
+            }
+        } catch (e) {
+            console.error('Poll failed:', e);
+        }
+    }, 2000);
+}
+
+// Auto-start polling if a run is active
+const currentStatus = '{{ run_state.status }}';
+if (['planning', 'writing', 'stitching', 'reviewing'].includes(currentStatus)) {
+    startPolling();
+}
+</script>
+{% endblock %}
