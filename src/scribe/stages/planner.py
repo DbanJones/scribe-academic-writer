@@ -24,12 +24,13 @@ async def run_planner(
     project: Project,
     config: ScribeConfig,
     stream_callback: StreamCallback | None = None,
+    review_context: str = "",
 ) -> Plan:
     """Run the planner stage.
 
     1. Load outline, style, and all ref texts.
     2. Pre-extract refs to cache for executor access.
-    3. Build planner prompt.
+    3. Build planner prompt (with review context if available).
     4. Invoke Opus via SDK.
     5. Parse JSON response into Plan model.
     6. Save plan.json and plan_review.md.
@@ -44,7 +45,10 @@ async def run_planner(
         extract_ref_to_cache(ref_path, project.extracted_dir)
 
     # Build prompt
-    system, user = planner_prompt(outline_text, style_text, ref_texts, config)
+    system, user = planner_prompt(
+        outline_text, style_text, ref_texts, config,
+        review_context=review_context,
+    )
 
     # Invoke SDK
     response = await invoke(

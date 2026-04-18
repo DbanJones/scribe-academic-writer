@@ -88,6 +88,73 @@
     {% endif %}
 </div>
 
+<!-- Thesis Analysis -->
+{% if doc_review %}
+<div class="card">
+    <h2>Thesis Analysis</h2>
+
+    <div class="form-row">
+        <label>Problem Statement</label>
+        <p style="font-size: 0.9rem;">{{ doc_review.problem_statement }}</p>
+    </div>
+
+    <div class="form-row">
+        <label>Need for Resolution</label>
+        <p style="font-size: 0.9rem;">{{ doc_review.need_for_resolution }}</p>
+    </div>
+
+    <div class="form-row">
+        <label>Existing Gap</label>
+        <p style="font-size: 0.9rem;">{{ doc_review.existing_gap }}</p>
+    </div>
+
+    <div class="form-row">
+        <label>Key Question</label>
+        <p style="font-size: 0.9rem; font-weight: 600; color: var(--accent);">{{ doc_review.key_question }}</p>
+    </div>
+
+    <div class="form-row">
+        <label>Key Themes</label>
+        <div>
+            {% for theme in doc_review.key_themes %}
+            <span class="tag" style="margin: 0.15rem; background: rgba(108, 140, 255, 0.15); color: var(--accent);">{{ theme }}</span>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if doc_review.narrative_arc %}
+    <div class="form-row">
+        <label>Narrative Arc</label>
+        <p style="font-size: 0.85rem; color: var(--text-dim);">{{ doc_review.narrative_arc }}</p>
+    </div>
+    {% endif %}
+
+    {% if doc_review.section_mappings %}
+    <div class="form-row">
+        <label>Section Roles</label>
+        <table>
+            <thead>
+                <tr>
+                    <th>Section</th>
+                    <th>Role</th>
+                    <th>Answers Question By</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in doc_review.section_mappings %}
+                <tr>
+                    <td>{{ m.section }}</td>
+                    <td>{{ m.role }}</td>
+                    <td style="font-size: 0.8rem; color: var(--text-dim);">{{ m.answers_question_by }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
 <!-- Plan Details -->
 {% if plan %}
 <div class="card">

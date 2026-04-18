@@ -28,8 +28,14 @@ async def run_executor(
     stream_callback: StreamCallback | None = None,
     chunk_filter: str | None = None,
     force: bool = False,
+    review_context: str = "",
+    section_mappings: dict[str, dict] | None = None,
 ) -> list[Path]:
     """Execute all (or filtered) chunks in parallel.
+
+    Args:
+        review_context: Thesis analysis text to inject into every chunk prompt.
+        section_mappings: Dict of section_name -> {role, answers_question_by} from DocumentReview.
 
     Returns list of draft file paths written.
     """
@@ -37,6 +43,7 @@ async def run_executor(
     outline_text = project.load_outline()
     style_text = project.load_style()
     sections = parse_outline(outline_text)
+    section_mappings = section_mappings or {}
 
     # Pre-extract refs to cache
     for ref_path in project.list_refs():
@@ -82,6 +89,9 @@ async def run_executor(
             for v in chunk.visuals
         ]
 
+        # Look up this chunk's role from the document review
+        chunk_mapping = _find_chunk_mapping(chunk, section_mappings)
+
         system, user = executor_chunk_prompt(
             chunk_id=chunk.id,
             chunk_title=chunk.title,
@@ -93,6 +103,9 @@ async def run_executor(
             visuals=visuals,
             style_text=style_text,
             config=config,
+            review_context=review_context,
+            chunk_role=chunk_mapping.get("role", ""),
+            chunk_answers_by=chunk_mapping.get("answers_question_by", ""),
         )
 
         tasks.append({
@@ -156,3 +169,23 @@ async def run_executor(
 
     save_state(run_state, project.state_path)
     return draft_paths
+
+
+def _find_chunk_mapping(chunk, section_mappings: dict[str, dict]) -> dict:
+    """Find the review mapping for a chunk by matching its title or covers."""
+    # Try exact match on title
+    if chunk.title in section_mappings:
+        return section_mappings[chunk.title]
+
+    # Try matching on covers
+    for cover in chunk.covers:
+        if cover in section_mappings:
+            return section_mappings[cover]
+
+    # Try case-insensitive partial match
+    title_lower = chunk.title.lower()
+    for key, mapping in section_mappings.items():
+        if key.lower() in title_lower or title_lower in key.lower():
+            return mapping
+
+    return {}

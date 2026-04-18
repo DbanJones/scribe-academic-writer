@@ -19,6 +19,7 @@ async def run_stitcher(
     plan: Plan,
     config: ScribeConfig,
     stream_callback: StreamCallback | None = None,
+    review_context: str = "",
 ) -> Path:
     """Read all draft files in order, stitch into final.md.
 
@@ -39,7 +40,10 @@ async def run_stitcher(
     outline_text = project.load_outline()
     style_text = project.load_style()
 
-    system, user = stitcher_prompt(draft_texts, style_text, outline_text)
+    system, user = stitcher_prompt(
+        draft_texts, style_text, outline_text,
+        review_context=review_context,
+    )
 
     response = await invoke(
         prompt=user,

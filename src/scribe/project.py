@@ -10,6 +10,36 @@ from scribe.config import ScribeConfig
 from scribe.models import Chunk
 
 
+def _read_document(path: Path) -> str:
+    """Read a document file, converting DOCX/DOC to markdown text."""
+    suffix = path.suffix.lower()
+
+    if suffix in (".md", ".txt", ""):
+        return path.read_text(encoding="utf-8")
+
+    if suffix == ".docx":
+        from scribe.parsers.docx import extract
+        return extract(path)
+
+    if suffix == ".doc":
+        # .doc (legacy Word) -- try converting via docx parser with a warning
+        # python-docx doesn't support .doc, so we attempt textract or raw read
+        try:
+            from scribe.parsers.docx import extract
+            return extract(path)
+        except Exception:
+            # Fallback: try reading as plain text
+            try:
+                return path.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                raise ValueError(
+                    f"Cannot read .doc file: {path}. "
+                    "Please convert to .docx or .md format."
+                )
+
+    return path.read_text(encoding="utf-8")
+
+
 class Project:
     """Encapsulates all path resolution for a Scribe project."""
 
@@ -18,12 +48,25 @@ class Project:
 
     # --- Input paths ---
 
+    OUTLINE_EXTENSIONS = (".md", ".txt", ".docx", ".doc")
+    STYLE_EXTENSIONS = (".md", ".txt", ".docx", ".doc")
+
     @property
     def outline_path(self) -> Path:
-        return self.root / "outline.md"
+        """Find the outline file, checking multiple extensions."""
+        for ext in self.OUTLINE_EXTENSIONS:
+            p = self.root / f"outline{ext}"
+            if p.exists():
+                return p
+        return self.root / "outline.md"  # default even if missing
 
     @property
     def style_path(self) -> Path:
+        """Find the style guide file, checking multiple extensions."""
+        for ext in self.STYLE_EXTENSIONS:
+            p = self.root / f"style{ext}"
+            if p.exists():
+                return p
         return self.root / "style.md"
 
     @property
@@ -39,6 +82,14 @@ class Project:
     @property
     def scribe_dir(self) -> Path:
         return self.root / ".scribe"
+
+    @property
+    def review_path(self) -> Path:
+        return self.scribe_dir / "document_review.json"
+
+    @property
+    def review_summary_path(self) -> Path:
+        return self.scribe_dir / "document_review.md"
 
     @property
     def plan_path(self) -> Path:
@@ -82,8 +133,9 @@ class Project:
         return ScribeConfig.load(self.config_path)
 
     def load_style(self) -> str:
-        if self.style_path.exists():
-            return self.style_path.read_text(encoding="utf-8")
+        path = self.style_path
+        if path.exists():
+            return _read_document(path)
         default = pkg_resources.files("scribe.resources").joinpath("default_style.md")
         return default.read_text(encoding="utf-8")
 
@@ -95,9 +147,13 @@ class Project:
         return rules.read_text(encoding="utf-8")
 
     def load_outline(self) -> str:
-        if not self.outline_path.exists():
-            raise FileNotFoundError(f"No outline.md found at {self.outline_path}")
-        return self.outline_path.read_text(encoding="utf-8")
+        path = self.outline_path
+        if not path.exists():
+            raise FileNotFoundError(
+                f"No outline found at {self.root}. "
+                f"Expected one of: {', '.join('outline' + e for e in self.OUTLINE_EXTENSIONS)}"
+            )
+        return _read_document(path)
 
     def list_refs(self) -> list[Path]:
         if not self.refs_dir.exists():

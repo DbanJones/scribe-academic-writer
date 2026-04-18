@@ -68,6 +68,71 @@ class Plan(BaseModel):
         return cls.model_validate_json(path.read_text(encoding="utf-8"))
 
 
+# --- Document review (thesis analysis) ---
+
+
+class ChunkThemeMapping(BaseModel):
+    """How a section/chunk relates to the overall thesis."""
+    section: str
+    role: str  # e.g. "establishes the problem", "provides evidence for..."
+    themes_addressed: list[str] = Field(default_factory=list)
+    answers_question_by: str = ""  # how this chunk answers the key question
+
+
+class DocumentReview(BaseModel):
+    """Pre-planning thesis analysis produced by Opus."""
+    problem_statement: str = ""
+    need_for_resolution: str = ""
+    existing_gap: str = ""
+    key_question: str = ""
+    key_themes: list[str] = Field(default_factory=list)
+    theme_descriptions: dict[str, str] = Field(default_factory=dict)
+    section_mappings: list[ChunkThemeMapping] = Field(default_factory=list)
+    narrative_arc: str = ""  # how the document should flow as a whole
+    tone_guidance: str = ""  # overall tone/register observations
+
+    def save(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            self.model_dump_json(indent=2),
+            encoding="utf-8",
+        )
+
+    @classmethod
+    def load(cls, path: Path) -> DocumentReview:
+        return cls.model_validate_json(path.read_text(encoding="utf-8"))
+
+    def as_prompt_context(self) -> str:
+        """Render the review as a concise prompt block for downstream stages."""
+        lines = [
+            "DOCUMENT THESIS ANALYSIS (maintain this frame throughout):",
+            "",
+            f"PROBLEM STATEMENT: {self.problem_statement}",
+            f"NEED FOR RESOLUTION: {self.need_for_resolution}",
+            f"EXISTING GAP: {self.existing_gap}",
+            f"KEY QUESTION: {self.key_question}",
+            "",
+            "KEY THEMES:",
+        ]
+        for theme in self.key_themes:
+            desc = self.theme_descriptions.get(theme, "")
+            lines.append(f"  - {theme}: {desc}" if desc else f"  - {theme}")
+
+        lines.append("")
+        lines.append(f"NARRATIVE ARC: {self.narrative_arc}")
+
+        if self.section_mappings:
+            lines.append("")
+            lines.append("SECTION ROLES:")
+            for m in self.section_mappings:
+                themes = ", ".join(m.themes_addressed) if m.themes_addressed else "general"
+                lines.append(f"  - {m.section}: {m.role} (themes: {themes})")
+                if m.answers_question_by:
+                    lines.append(f"    Answers question by: {m.answers_question_by}")
+
+        return "\n".join(lines)
+
+
 # --- Run state ---
 
 

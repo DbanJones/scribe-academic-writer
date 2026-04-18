@@ -44,8 +44,8 @@
         <h2>Document Outline <span class="badge">Required</span></h2>
         <div class="form-row">
             <label for="outline">Upload your outline (.md file)</label>
-            <input type="file" id="outline" name="outline" accept=".md,.txt,.markdown" required>
-            <p class="hint">Markdown file with headings and bullet points. Use [depth:deep], [ref:path], [web] tags to control generation.</p>
+            <input type="file" id="outline" name="outline" accept=".md,.txt,.markdown,.doc,.docx" required>
+            <p class="hint">Markdown, Word (.docx/.doc), or plain text file with headings and bullet points. Use [depth:deep], [ref:path], [web] tags to control generation.</p>
         </div>
     </div>
 
@@ -64,9 +64,9 @@
         </div>
         <div id="style_upload_area" style="display: none;">
             <div class="form-row">
-                <label for="style_guide">Custom style guide (.md file)</label>
-                <input type="file" id="style_guide" name="style_guide" accept=".md,.txt,.markdown">
-                <p class="hint">Define voice, rules, citation format, and hard prohibitions.</p>
+                <label for="style_guide">Custom style guide</label>
+                <input type="file" id="style_guide" name="style_guide" accept=".md,.txt,.markdown,.doc,.docx">
+                <p class="hint">Markdown, Word (.docx/.doc), or plain text. Define voice, rules, citation format, and hard prohibitions.</p>
             </div>
         </div>
         <div id="style_builtin_info">

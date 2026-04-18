@@ -93,18 +93,22 @@ def planner_prompt(
     style_text: str,
     ref_texts: dict[str, str],
     config: ScribeConfig,
+    review_context: str = "",
 ) -> tuple[str, str]:
     """Build the planner prompt.
 
     Returns:
         (system_prompt, user_prompt) tuple.
     """
+    review_block = f"\n\n{review_context}\n" if review_context else ""
+
     system = (
         "You are a document planner for a chunked long-form writing system. "
         "Your job is to read an outline, style guide, and reference materials, "
         "then produce a detailed chunking plan as JSON.\n\n"
         "STYLE GUIDE (follow this exactly in all planning decisions):\n"
         f"{style_text}\n"
+        f"{review_block}"
     )
 
     refs_block = ""
@@ -131,6 +135,8 @@ For each chunk decide:
 - which reference documents to use and which specific sections/pages of each
 - whether web search is needed for recent facts not in the references
 {suggest_visuals_instruction}- a one-line rationale for the chunking decision
+
+{"If a document thesis analysis is provided above, use it to inform your chunking decisions. Ensure each chunk's scope and depth serve the overall argument, problem statement, and key question." if review_context else ""}
 
 Also produce a document-level review noting:
 - bullets with no supporting source (gaps)
@@ -182,6 +188,9 @@ def executor_chunk_prompt(
     visuals: list[dict[str, str]],
     style_text: str,
     config: ScribeConfig,
+    review_context: str = "",
+    chunk_role: str = "",
+    chunk_answers_by: str = "",
 ) -> tuple[str, str]:
     """Build the per-chunk executor prompt.
 
@@ -191,12 +200,15 @@ def executor_chunk_prompt(
     Returns:
         (system_prompt, user_prompt) tuple.
     """
+    review_block = f"\n\n{review_context}\n" if review_context else ""
+
     system = (
         "You are a prose writer for a chunked long-form document. "
         "Write exactly the chunk described below. Follow the style guide exactly.\n\n"
         "STYLE GUIDE:\n"
         f"{style_text}\n\n"
         f"{ACADEMIC_RULES_PREAMBLE}"
+        f"{review_block}"
     )
 
     source_instructions = ""
@@ -239,10 +251,21 @@ def executor_chunk_prompt(
             )
         visual_instruction += "\n"
 
+    role_instruction = ""
+    if chunk_role or chunk_answers_by:
+        role_instruction = "THIS CHUNK'S ROLE IN THE DOCUMENT:\n"
+        if chunk_role:
+            role_instruction += f"  Role: {chunk_role}\n"
+        if chunk_answers_by:
+            role_instruction += f"  Answers the key question by: {chunk_answers_by}\n"
+        role_instruction += (
+            "Keep this role in mind -- every paragraph should serve the overall argument.\n\n"
+        )
+
     user = f"""\
 Write chunk `{chunk_id}`: "{chunk_title}".
 
-{source_instructions}{web_instruction}{visual_instruction}\
+{role_instruction}{source_instructions}{web_instruction}{visual_instruction}\
 Outline bullets to expand:
 {outline_bullets}
 
@@ -261,18 +284,22 @@ def stitcher_prompt(
     draft_texts: dict[str, str],
     style_text: str,
     outline_text: str,
+    review_context: str = "",
 ) -> tuple[str, str]:
     """Build the stitcher prompt.
 
     Returns:
         (system_prompt, user_prompt) tuple.
     """
+    review_block = f"\n\n{review_context}\n" if review_context else ""
+
     system = (
         "You are stitching a long-form document from sectional drafts. "
         "Follow the style guide exactly.\n\n"
         "STYLE GUIDE:\n"
         f"{style_text}\n\n"
         f"{ACADEMIC_RULES_PREAMBLE}"
+        f"{review_block}"
     )
 
     drafts_block = ""
@@ -288,6 +315,8 @@ Read each draft chunk in order below. Produce the final document with:
 - preserved citations exactly as written (do not reword them)
 - preserved visual suggestion placeholders exactly (lines containing `![SUGGEST:...`)
 - consolidated bibliography at the end if cited sources are used
+{"- ensure the narrative arc from the thesis analysis is maintained throughout" if review_context else ""}
+{"- verify each section serves its identified role in the overall argument" if review_context else ""}
 
 Do not change substantive content, only smooth joins and enforce consistency.
 

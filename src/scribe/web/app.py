@@ -98,8 +98,9 @@ def create_project():
     # Handle outline upload
     outline_file = request.files.get("outline")
     if outline_file and outline_file.filename:
-        content = outline_file.read().decode("utf-8")
-        project.outline_path.write_text(content, encoding="utf-8")
+        ext = Path(outline_file.filename).suffix.lower() or ".md"
+        dest = project.root / f"outline{ext}"
+        outline_file.save(str(dest))
         _add_log(f"Uploaded outline: {outline_file.filename}")
 
     # Handle style guide
@@ -107,8 +108,9 @@ def create_project():
     if style_choice == "upload":
         style_file = request.files.get("style_guide")
         if style_file and style_file.filename:
-            content = style_file.read().decode("utf-8")
-            project.style_path.write_text(content, encoding="utf-8")
+            ext = Path(style_file.filename).suffix.lower() or ".md"
+            dest = project.root / f"style{ext}"
+            style_file.save(str(dest))
             _add_log(f"Uploaded style guide: {style_file.filename}")
     elif style_choice == "builtin":
         # Copy default style if not already present
@@ -165,11 +167,11 @@ def project_view():
         return redirect(url_for("index"))
 
     project_path = Path(project_dir)
-    if not (project_path / "outline.md").exists():
-        flash(f"No outline.md found in {project_dir}", "error")
+    project = Project(project_path)
+    if not project.outline_path.exists():
+        flash(f"No outline found in {project_dir}", "error")
         return redirect(url_for("index"))
 
-    project = Project(project_path)
     config = project.config()
 
     # Gather project info
@@ -182,12 +184,21 @@ def project_view():
         "refs": [p.name for p in project.list_refs()],
         "plan_exists": project.plan_path.exists(),
         "final_exists": project.final_path.exists(),
+        "review_exists": project.review_path.exists(),
     }
 
     plan = None
     if project.plan_path.exists():
         try:
             plan = Plan.load(project.plan_path)
+        except Exception:
+            pass
+
+    doc_review = None
+    if project.review_path.exists():
+        try:
+            from scribe.models import DocumentReview
+            doc_review = DocumentReview.load(project.review_path)
         except Exception:
             pass
 
@@ -199,6 +210,7 @@ def project_view():
         "project.html",
         info=info,
         plan=plan,
+        doc_review=doc_review,
         final_words=final_words,
         run_state=_run_state,
     )
@@ -242,13 +254,35 @@ def _run_pipeline_thread(project_dir: str, skip_review: bool):
         config = project.config()
         project.ensure_dirs()
 
+        # --- DOCUMENT REVIEW ---
+        _update_state(status="reviewing", message="Analysing thesis structure (Opus)...")
+        _add_log("Stage 1/4: Document thesis review...")
+
+        from scribe.stages.reviewer import run_reviewer
+
+        doc_review = asyncio.run(run_reviewer(project, config))
+        review_context = doc_review.as_prompt_context()
+        _add_log(f"  Key question: {doc_review.key_question}")
+        _add_log(f"  Themes: {', '.join(doc_review.key_themes)}")
+        _add_log(f"  Problem: {doc_review.problem_statement[:100]}")
+
+        # Build section mappings for per-chunk role context
+        section_mappings = {}
+        for m in doc_review.section_mappings:
+            section_mappings[m.section] = {
+                "role": m.role,
+                "answers_question_by": m.answers_question_by,
+            }
+
+        _update_state(progress=15)
+
         # --- PLAN ---
         _update_state(status="planning", message="Running planner (Opus)...")
-        _add_log("Stage 1/3: Planning...")
+        _add_log("Stage 2/4: Planning...")
 
         from scribe.stages.planner import run_planner
 
-        plan = asyncio.run(run_planner(project, config))
+        plan = asyncio.run(run_planner(project, config, review_context=review_context))
         _add_log(f"Plan: {plan.estimated_chunks} chunks, ~{plan.estimated_words:,} words")
 
         if plan.gaps:
@@ -259,11 +293,11 @@ def _run_pipeline_thread(project_dir: str, skip_review: bool):
             status="writing",
             message=f"Writing {len(plan.chunks)} chunks...",
             chunks_total=len(plan.chunks),
-            progress=33,
+            progress=30,
         )
 
         # --- WRITE ---
-        _add_log(f"Stage 2/3: Writing {len(plan.chunks)} chunks in parallel...")
+        _add_log(f"Stage 3/4: Writing {len(plan.chunks)} chunks in parallel...")
 
         from scribe.stages.executor import run_executor
 
@@ -273,7 +307,7 @@ def _run_pipeline_thread(project_dir: str, skip_review: bool):
                     _run_state["chunks_done"] += 1
                     done = _run_state["chunks_done"]
                     total = _run_state["chunks_total"]
-                    _run_state["progress"] = 33 + int(50 * done / max(total, 1))
+                    _run_state["progress"] = 30 + int(50 * done / max(total, 1))
                 _add_log(f"  Chunk {chunk_id} done")
 
         drafts = asyncio.run(
@@ -281,17 +315,21 @@ def _run_pipeline_thread(project_dir: str, skip_review: bool):
                 project, plan, config,
                 stream_callback=_on_event,
                 force=True,
+                review_context=review_context,
+                section_mappings=section_mappings,
             )
         )
         _add_log(f"{len(drafts)} drafts written")
 
         # --- STITCH ---
         _update_state(status="stitching", message="Stitching final document (Opus)...", progress=83)
-        _add_log("Stage 3/3: Stitching...")
+        _add_log("Stage 4/4: Stitching...")
 
         from scribe.stages.stitcher import run_stitcher
 
-        final_path = asyncio.run(run_stitcher(project, plan, config))
+        final_path = asyncio.run(
+            run_stitcher(project, plan, config, review_context=review_context)
+        )
         final_words = len(final_path.read_text(encoding="utf-8").split())
 
         _update_state(

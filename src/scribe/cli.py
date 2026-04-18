@@ -148,10 +148,11 @@ def run(
     """Full pipeline: plan, review, write, stitch."""
     from scribe.diff import changed_files, chunks_affected_by_changes, compute_hashes, save_hashes
     from scribe.git import ScribeRepo
-    from scribe.models import Plan
+    from scribe.models import DocumentReview, Plan
     from scribe.project import Project
     from scribe.stages.executor import run_executor
     from scribe.stages.planner import run_planner
+    from scribe.stages.reviewer import run_reviewer
     from scribe.stages.stitcher import run_stitcher
     from scribe.tokens import TokenTracker, generate_run_report
     from scribe.tui.progress import ExecutionTUI
@@ -170,12 +171,24 @@ def run(
     if changes and not force:
         console.print(f"[dim]Changed inputs: {', '.join(changes)}[/dim]")
 
+    # --- DOCUMENT REVIEW (thesis analysis) ---
+    console.print(f"[bold]Stage 1/5: Document Review ({config.project_name})[/bold]")
+    console.print(f"  Analysing thesis structure, themes, and argument...\n")
+
+    doc_review = asyncio.run(run_reviewer(project, config))
+    review_context = doc_review.as_prompt_context()
+
+    console.print(f"[green]Review complete:[/green]")
+    console.print(f"  Key question: {doc_review.key_question}")
+    console.print(f"  Themes: {', '.join(doc_review.key_themes)}")
+    console.print(f"  Sections mapped: {len(doc_review.section_mappings)}\n")
+
     # --- PLAN ---
-    console.print(f"[bold]Stage 1/4: Planning ({config.project_name})[/bold]")
+    console.print(f"[bold]Stage 2/5: Planning[/bold]")
     console.print(f"  Outline: {project.outline_path}")
     console.print(f"  Refs: {len(project.list_refs())} files\n")
 
-    the_plan = asyncio.run(run_planner(project, config))
+    the_plan = asyncio.run(run_planner(project, config, review_context=review_context))
 
     console.print(
         f"[green]Plan: {the_plan.estimated_chunks} chunks, "
@@ -192,7 +205,7 @@ def run(
 
     # --- REVIEW ---
     if not no_review:
-        console.print("[bold]Stage 2/4: Review[/bold]\n")
+        console.print("[bold]Stage 3/5: Review[/bold]\n")
         tui = ReviewTUI(the_plan, project)
         result = tui.run()
         if result is None:
@@ -202,8 +215,16 @@ def run(
     else:
         the_plan.save(project.plan_path)
 
+    # Build section mappings from review for per-chunk role context
+    section_mappings = {}
+    for m in doc_review.section_mappings:
+        section_mappings[m.section] = {
+            "role": m.role,
+            "answers_question_by": m.answers_question_by,
+        }
+
     # --- WRITE ---
-    console.print(f"\n[bold]Stage 3/4: Writing {len(the_plan.chunks)} chunks[/bold]\n")
+    console.print(f"\n[bold]Stage 4/5: Writing {len(the_plan.chunks)} chunks[/bold]\n")
     exec_tui = ExecutionTUI(the_plan, verbose=verbose)
 
     async def _write() -> list[Path]:
@@ -215,6 +236,8 @@ def run(
                 config,
                 force=force,
                 stream_callback=exec_tui.stream_callback,
+                review_context=review_context,
+                section_mappings=section_mappings,
             )
         finally:
             exec_tui.stop()
@@ -227,8 +250,10 @@ def run(
         git_repo.commit_stage("draft", config.project_name, config.git.commit_template)
 
     # --- STITCH ---
-    console.print("[bold]Stage 4/4: Stitching[/bold]\n")
-    final_path = asyncio.run(run_stitcher(project, the_plan, config))
+    console.print("[bold]Stage 5/5: Stitching[/bold]\n")
+    final_path = asyncio.run(
+        run_stitcher(project, the_plan, config, review_context=review_context)
+    )
 
     word_count = len(final_path.read_text(encoding="utf-8").split())
     pipeline_duration = time.time() - pipeline_start
