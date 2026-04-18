@@ -69,22 +69,55 @@ PLAN_JSON_SCHEMA = """\
 
 
 ACADEMIC_RULES_PREAMBLE = """\
-ACADEMIC WRITING QUALITY RULES (apply these throughout):
-- Use concrete nouns and vivid verbs; avoid nominalizations where the verb form is clearer
-- Keep subjects and verbs close together (within 10-12 words)
-- Prefer active voice unless passive serves topic continuity or the agent is irrelevant
-- Put actions in verbs, not in abstract nouns paired with empty verbs (avoid "perform an analysis" -> "analyse")
-- Begin sentences with familiar information, end with new/important information (old-to-new flow)
-- Omit needless words: replace wordy phrases with concise alternatives
-- Vary sentence length for rhythm; flag any sentence over 40 words for splitting
-- Each paragraph: one idea, topic sentence first, 3-6 sentences, concluding thought
-- Use parallel construction in lists and series
-- State claims positively rather than negatively where possible
-- Hedge empirical claims appropriately ("suggests", "indicates") but be direct on established facts
-- Weave citations into your argument; never string citations without synthesis
-- Minimise metadiscourse ("In this section we will discuss...") -- keep signposting lean
-- No clutter: "due to the fact that" -> "because", "in order to" -> "to", "utilize" -> "use"
-- No unnecessary qualifiers: cut "very", "quite", "rather", "somewhat" unless they add precision
+ACADEMIC WRITING RULES (apply rigorously throughout):
+
+PAPER ARCHITECTURE:
+- Every paper contains six elements: Context, Literature, Proposal, Test Design, Results, Discussion
+- The opening width must match the resolution width (hourglass shape) -- do not overpromise
+- Write for the skim-reader: title, abstract, end of lit review, conclusion, and figure captions must be the strongest parts
+- Lead with the point, not the promise -- never open with "It is important to note that..." or "The purpose of this paper is to..."
+
+CITATIONS AND ARGUMENT:
+- Every citation must name the author, state their specific claim, and explain why it is relevant here
+- Never dump citations at the end of a sentence -- weave them into the argument as interlocutors
+- Evaluate, do not list: synthesise positions across sources rather than walking through them sequentially
+- Position your contribution relative to existing debate ("While X argues..., I contend...")
+- Match hedging to evidence: "demonstrates" for direct evidence, "suggests" for correlational, "may" for speculation
+- Never stack hedges ("might possibly suggest") or under-hedge ("proves")
+
+CHARACTERS AND ACTIONS:
+- Subjects should name real characters; verbs should name real actions
+- Kill zombie nouns: convert "the implementation of" back to "implemented"
+- Keep subjects and verbs within ~10 words of each other
+- Never pair empty verbs (make, perform, conduct, carry out) with nominalisations -- free the verb
+- Prefer active voice; use passive only when the agent is irrelevant or for topic continuity
+
+CONCISION:
+- If removing a word does not change the meaning, remove it
+- Replace wordy phrases: "due to the fact that" -> "because", "in order to" -> "to", "has the ability to" -> "can"
+- Cut inflated vocabulary: "utilise" -> "use", "methodology" -> "method", "facilitate" -> "help"
+- Drop empty intensifiers: "very", "quite", "rather", "extremely" -- quantify or remove
+- Drop redundant modifiers: "completely eliminate", "future plans", "end result"
+- Eliminate "there is/are" and "it is" constructions -- name the real subject
+
+PRECISION:
+- Quantify every claim of magnitude -- replace "significantly increased" with the actual number
+- No weasel words: "clearly", "obviously", "of course", "interestingly" ask the reader to accept rather than demonstrating
+- No rhetorical questions in papers -- restate as claims
+- Define technical terms and acronyms at first use; do not create abbreviations used fewer than three times
+
+SENTENCE AND PARAGRAPH CRAFT:
+- End sentences on the emphatic information (stress position)
+- Begin sentences with familiar information, end with new (old-to-new flow)
+- Vary sentence length deliberately -- three consecutive long sentences flatten prose
+- State claims positively: "not honest" -> "dishonest", "did not remember" -> "forgot"
+- Keep parallel structures parallel in all lists and comparisons
+- One paragraph, one point: topic sentence first, 4-8 sentences, concluding thought
+- Never open paragraphs with continuation connectives (Moreover, Furthermore, Additionally)
+
+FORMALITY:
+- No contractions, colloquialisms, phrasal verbs where formal alternatives exist, or emotive marketing language
+- Banned: "issues/challenges" (use "problems/constraints"), "successful" (use "effective"), "highlight" (use "reveals/examines"), "in terms of" (reorder the sentence)
 """
 
 

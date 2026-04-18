@@ -78,10 +78,20 @@ def _build_review_prompt(
 ) -> tuple[str, str]:
     """Build the document review prompt."""
     system = (
-        "You are a senior academic editor and thesis analyst. "
-        "Your task is to read an outline, style guide, and reference materials, "
-        "then produce a deep structural analysis of the document's thesis. "
+        "You are a senior academic editor and thesis analyst trained in the Allwood method "
+        "(Cambridge Engineering writing programme). Your task is to read an outline, style guide, "
+        "and reference materials, then produce a deep structural analysis of the document's thesis. "
         "This analysis will guide all subsequent writing to maintain coherence.\n\n"
+        "You understand that every research paper contains six identifiable elements:\n"
+        "1. Context (the world would be better if...)\n"
+        "2. Literature (prior work gives insight, but a gap remains)\n"
+        "3. Proposal (for the first time, we...)\n"
+        "4. Test design (how to verify the proposal)\n"
+        "5. Results (what the test showed, without interpretation)\n"
+        "6. Discussion (interpretation, gap filled to some extent)\n\n"
+        "The paper must follow an hourglass shape: wide opening narrows to specific work, "
+        "then widens back to match the opening scope. The opening width must match the "
+        "resolution width -- never overpromise.\n\n"
         "STYLE GUIDE:\n"
         f"{style_text}\n"
     )
@@ -98,26 +108,27 @@ Read the outline and reference materials below. Produce a structural thesis anal
 
 You must identify:
 
-1. **Problem statement**: What core problem does this document address? State it in 1-3 precise sentences.
+1. **Problem statement** (Allwood's "Context"): What core problem does this document address? The world would be a better place if only... State it in 1-3 precise sentences.
 
-2. **Need for resolution**: Why does this problem matter? What are the stakes -- who is affected, what are the consequences of inaction, why is it urgent?
+2. **Need for resolution**: Why does this problem matter? What are the stakes -- who is affected, what are the consequences of inaction, why is it urgent? This establishes why a reader should care.
 
-3. **Existing gap**: What gap in knowledge, practice, policy, or understanding currently exists that this document aims to fill? Be specific about what is missing.
+3. **Existing gap** (Allwood's "Literature" endpoint): What gap in knowledge, practice, policy, or understanding currently exists? Be specific: what have prior studies achieved, and what remains unresolved?
 
-4. **Key question**: What is THE central question the document answers? State it as a single, clear question.
+4. **Key question** (Allwood's "Proposal"): What is THE central question the document answers? State it as a single, clear question. This is the specific gap the document fills -- "For the first time, this paper..."
 
-5. **Key themes**: Identify 3-7 major themes that run through the document. These are the recurring ideas, concepts, or arguments that bind the sections together.
+5. **Key themes**: Identify 3-7 major themes that run through the document. These are the recurring ideas, concepts, or arguments that bind the sections together and create coherence across chunks.
 
 6. **Theme descriptions**: For each theme, write one sentence explaining its role in the overall argument.
 
 7. **Section mappings**: For each major section in the outline, explain:
-   - Its role in the overall argument (e.g., "establishes the problem", "provides empirical evidence", "synthesises competing views")
+   - Its structural role using Allwood's six elements (Context/Literature/Proposal/Test/Results/Discussion)
    - Which themes it addresses
    - How it contributes to answering the key question
+   - Whether it narrows (first half of hourglass) or widens (second half)
 
-8. **Narrative arc**: Describe in 2-4 sentences how the document should flow from opening to conclusion. What is the intellectual journey the reader takes?
+8. **Narrative arc**: Describe in 2-4 sentences the hourglass shape of the document. How does it open wide, narrow to the specific contribution, and widen back to match the opening scope? What is the intellectual journey?
 
-9. **Tone guidance**: What register, voice, and rhetorical stance are appropriate? Note any tensions (e.g., need for technical precision vs. accessibility).
+9. **Tone guidance**: What register, voice, and rhetorical stance are appropriate? Note: write for the skim-reader (title, abstract, end of lit review, conclusion, and captions must be the strongest parts). Flag any tensions (e.g., technical precision vs. accessibility).
 
 ---
 
