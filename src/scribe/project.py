@@ -97,6 +97,24 @@ class Project:
 
     # --- Revision mode paths ---
 
+    # --- Expansion mode paths ---
+
+    @property
+    def expansion_plan_path(self) -> Path:
+        return self.scribe_dir / "expansion_plan.json"
+
+    @property
+    def expansion_plan_summary_path(self) -> Path:
+        return self.scribe_dir / "expansion_plan.md"
+
+    @property
+    def expansions_dir(self) -> Path:
+        return self.scribe_dir / "expansions"
+
+    @property
+    def expanded_path(self) -> Path:
+        return self.root / "expanded.md"
+
     @property
     def audit_path(self) -> Path:
         return self.scribe_dir / "audit.json"
@@ -215,6 +233,7 @@ class Project:
             self.extracted_dir,
             self.runs_dir,
             self.revisions_dir,
+            self.expansions_dir,
         ]:
             d.mkdir(parents=True, exist_ok=True)
 

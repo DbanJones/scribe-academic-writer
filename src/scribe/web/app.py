@@ -89,6 +89,7 @@ _run_state: dict = {
     "chunks_done": 0,
     "chunks_total": 0,
     "error": None,
+    "error_kind": None,  # "scaffold", "missing_outline", or "generic"
     "final_path": None,
     "final_words": 0,
     "log": [],
@@ -432,8 +433,21 @@ def _run_pipeline_thread(project_dir: str, skip_review: bool):
         _add_log(f"Final document: {final_words:,} words at {final_path}")
 
     except Exception as e:
-        _update_state(status="error", message=str(e)[:300], error=str(e))
-        _add_log(f"ERROR: {e}")
+        msg = str(e)
+        # Detect user-actionable errors and mark them so the template can
+        # render a helpful card instead of a raw traceback.
+        error_kind = "generic"
+        if "default scaffold" in msg and "scribe init" in msg:
+            error_kind = "scaffold"
+        elif "No outline found" in msg:
+            error_kind = "missing_outline"
+        _update_state(
+            status="error",
+            message=msg[:300],
+            error=msg,
+            error_kind=error_kind,
+        )
+        _add_log(f"ERROR: {msg}")
 
 
 @app.route("/status")
@@ -848,7 +862,7 @@ def revise_start():
         error=None,
     )
     _rv_log(f"Uploaded source: {source_file.filename} -> {stored.name}")
-    scribe_recent.record_project(project.root, config=project.config())
+    scribe_recent.touch(project.root, name=project.config().project_name or None)
 
     thread = threading.Thread(
         target=_run_revise_thread,
@@ -1001,6 +1015,264 @@ def revise_download_audit():
         path = _revise_state.get("audit_summary_path")
     if not path or not Path(path).exists():
         return "No audit available yet", 404
+    return send_file(path, as_attachment=True)
+
+
+# ---------------------------------------------------------------------------
+# Expand routes
+# ---------------------------------------------------------------------------
+
+_expand_state: dict = {
+    "status": "idle",  # idle, parsing, planning, expanding, smoothing, done, error
+    "message": "",
+    "progress": 0,
+    "log": [],
+    "project_dir": None,
+    "expanded_path": None,
+    "plan_summary_path": None,
+    "original_words": 0,
+    "target_words": 0,
+    "expanded_words": 0,
+    "sections_total": 0,
+    "sections_done": 0,
+    "multiplier": 1.0,
+    "achieved_multiplier": 1.0,
+    "error": None,
+    "error_kind": None,
+}
+_expand_lock = threading.Lock()
+
+
+def _ex_update(**kwargs):
+    with _expand_lock:
+        _expand_state.update(kwargs)
+
+
+def _ex_log(msg: str):
+    with _expand_lock:
+        _expand_state["log"].append(
+            f"[{datetime.now().strftime('%H:%M:%S')}] {msg}"
+        )
+        if len(_expand_state["log"]) > 200:
+            _expand_state["log"] = _expand_state["log"][-200:]
+
+
+@app.route("/expand")
+def expand_view():
+    with _expand_lock:
+        state = dict(_expand_state)
+    return render_template("expand.html", active_nav="expand", expand_state=state)
+
+
+@app.route("/expand_start", methods=["POST"])
+def expand_start():
+    """Accept uploaded source + target + optional refs, kick off expansion."""
+    login = _require_login_json()
+    if login:
+        return login
+
+    if _expand_state["status"] not in ("idle", "done", "error"):
+        flash("An expansion is already in progress.", "error")
+        return redirect(url_for("expand_view"))
+
+    source_file = request.files.get("source")
+    if not source_file or not source_file.filename:
+        flash("Please select a document to expand.", "error")
+        return redirect(url_for("expand_view"))
+
+    output_folder = request.form.get("output_folder", "").strip()
+    if not output_folder:
+        flash("Please specify an output folder.", "error")
+        return redirect(url_for("expand_view"))
+
+    target_mode = request.form.get("target_mode", "multiplier")
+    try:
+        if target_mode == "target_words":
+            target_words = int(request.form.get("target_words", "0"))
+            multiplier = None
+        else:
+            multiplier = float(request.form.get("multiplier", "2.0"))
+            target_words = None
+    except (TypeError, ValueError):
+        flash("Target must be a number.", "error")
+        return redirect(url_for("expand_view"))
+
+    project_root = Path(output_folder).resolve()
+    project_root.mkdir(parents=True, exist_ok=True)
+    project = Project(project_root)
+    project.ensure_dirs()
+
+    from scribe.expansion import save_source_upload as _save_upload
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="scribe_expand_"))
+    tmp_path = tmp_dir / source_file.filename
+    source_file.save(str(tmp_path))
+    stored = _save_upload(project, tmp_path, source_file.filename)
+    tmp_path.unlink(missing_ok=True)
+    tmp_dir.rmdir()
+
+    # Style guide and reference uploads are optional
+    style_file = request.files.get("style_guide")
+    if style_file and style_file.filename:
+        ext = Path(style_file.filename).suffix.lower() or ".md"
+        (project.root / f"style{ext}").write_bytes(style_file.read())
+
+    ref_files = request.files.getlist("refs")
+    for ref_file in ref_files:
+        if ref_file and ref_file.filename:
+            (project.refs_dir / ref_file.filename).write_bytes(ref_file.read())
+
+    _ex_update(
+        status="parsing",
+        message="Starting expansion...",
+        progress=0,
+        log=[],
+        project_dir=str(project.root),
+        expanded_path=None,
+        plan_summary_path=None,
+        original_words=0,
+        target_words=target_words or 0,
+        expanded_words=0,
+        sections_total=0,
+        sections_done=0,
+        multiplier=multiplier or 0.0,
+        achieved_multiplier=0.0,
+        error=None,
+        error_kind=None,
+    )
+    _ex_log(f"Uploaded source: {source_file.filename} -> {stored.name}")
+    scribe_recent.touch(project.root, name=project.config().project_name or None)
+
+    thread = threading.Thread(
+        target=_run_expand_thread,
+        args=(str(project.root), target_words, multiplier),
+        daemon=True,
+    )
+    thread.start()
+    return redirect(url_for("expand_view"))
+
+
+def _run_expand_thread(project_dir: str, target_words: int | None, multiplier: float | None):
+    try:
+        from scribe.expansion import (
+            ExpansionInputError,
+            load_source_document_for_expansion,
+            run_expansion_pipeline,
+        )
+
+        project = Project(Path(project_dir))
+        config = project.config()
+
+        # Stage 1: parse (so we can populate section totals early)
+        _ex_update(status="parsing", message="Parsing source document...", progress=5)
+        try:
+            document_text, sections = load_source_document_for_expansion(project)
+        except ExpansionInputError as e:
+            _ex_update(status="error", message=str(e), error=str(e),
+                       error_kind="input", progress=0)
+            _ex_log(f"ERROR: {e}")
+            return
+
+        current_words = sum(s.word_count for s in sections if s.id != "preamble")
+        _ex_update(
+            original_words=current_words,
+            sections_total=len(sections),
+        )
+        _ex_log(f"Parsed: {len(sections)} sections, {current_words:,} words")
+
+        # Resolve target so we can show it in the UI
+        if target_words and target_words > current_words:
+            _ex_update(target_words=target_words,
+                       multiplier=target_words / max(current_words, 1))
+        elif multiplier and multiplier > 1.0:
+            _ex_update(target_words=int(current_words * multiplier),
+                       multiplier=multiplier)
+        else:
+            _ex_update(target_words=current_words * 2, multiplier=2.0)
+
+        # Run the full pipeline with streaming updates
+        _ex_update(status="planning", message="Planning expansion (Opus)...",
+                   progress=10)
+        _ex_log("Stage 2/4: Planning expansion...")
+
+        async def _event_cb(cid, event_type, data):
+            if cid == "expansion_planner":
+                if event_type == "tool_use":
+                    _ex_log(f"  planner: {data.get('name', '')}")
+            elif event_type == "result" and not data.get("is_error"):
+                # A per-section expansion finished
+                with _expand_lock:
+                    _expand_state["sections_done"] += 1
+                    done = _expand_state["sections_done"]
+                    total = _expand_state["sections_total"] or 1
+                    _expand_state["progress"] = 35 + int(45 * done / total)
+                _ex_log(f"  expanded: {cid}")
+
+        # Drive the full pipeline. It re-parses internally (using the same
+        # function) but that's cheap and idempotent.
+        _ex_update(status="expanding", message="Expanding sections (Sonnet, parallel)...",
+                   progress=30)
+        _ex_log("Stage 3/4: Expanding sections...")
+
+        summary = asyncio.run(run_expansion_pipeline(
+            project=project,
+            config=config,
+            target_words=target_words,
+            multiplier=multiplier,
+            stream_callback=_event_cb,
+        ))
+
+        if summary.get("sections_failed"):
+            _ex_log(f"  {summary['sections_failed']} section(s) failed, originals kept")
+
+        _ex_update(status="smoothing", message="Smoothing transitions (Opus)...",
+                   progress=88)
+        _ex_log("Stage 4/4: Smoothing transitions...")
+
+        _ex_update(
+            status="done",
+            message=f"Done! {summary['expanded_words']:,} words "
+                    f"({summary['achieved_multiplier']:.2f}x)",
+            progress=100,
+            expanded_path=summary["expanded_path"],
+            plan_summary_path=summary["plan_summary_path"],
+            expanded_words=summary["expanded_words"],
+            achieved_multiplier=summary["achieved_multiplier"],
+            sections_done=summary["sections_expanded"],
+        )
+        _ex_log(
+            f"Expansion complete: {summary['expanded_words']:,} words at "
+            f"{summary['expanded_path']}"
+        )
+    except Exception as e:  # noqa: BLE001
+        import traceback
+        tb = traceback.format_exc()
+        logging.getLogger(__name__).exception("Expansion pipeline failed")
+        _ex_update(status="error", message=str(e)[:300], error=tb[-1500:])
+        _ex_log(f"ERROR: {e}")
+
+
+@app.route("/expand_status")
+def expand_status():
+    with _expand_lock:
+        return jsonify(dict(_expand_state))
+
+
+@app.route("/expand_download")
+def expand_download():
+    with _expand_lock:
+        path = _expand_state.get("expanded_path")
+    if not path or not Path(path).exists():
+        return "No output available yet", 404
+    return send_file(path, as_attachment=True)
+
+
+@app.route("/expand_download_plan")
+def expand_download_plan():
+    with _expand_lock:
+        path = _expand_state.get("plan_summary_path")
+    if not path or not Path(path).exists():
+        return "No plan available yet", 404
     return send_file(path, as_attachment=True)
 
 

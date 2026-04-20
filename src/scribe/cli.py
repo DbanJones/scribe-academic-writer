@@ -733,6 +733,166 @@ def revise(
         raise typer.Exit(1)
 
 
+@app.command()
+def expand(
+    source: Path = typer.Argument(
+        ...,
+        help="Path to the existing draft (.md, .docx, .doc, .txt).",
+    ),
+    output_dir: Path | None = typer.Option(
+        None, "--output-dir",
+        help="Project folder to create/use (defaults to <source>_expanded next to the source).",
+    ),
+    target_words: int | None = typer.Option(
+        None, "--target-words",
+        help="Target total word count for the expanded document.",
+    ),
+    multiplier: float | None = typer.Option(
+        None, "--multiplier",
+        help="Target multiplier (e.g. 2.0 = double). Ignored if --target-words is given.",
+    ),
+    plan_only: bool = typer.Option(
+        False, "--plan-only",
+        help="Run the expansion planner only; do not expand or stitch.",
+    ),
+    no_smooth: bool = typer.Option(
+        False, "--no-smooth",
+        help="Skip the final smoothing pass (useful for debugging).",
+    ),
+) -> None:
+    """Expand a substantive draft into a longer, deeper version.
+
+    Preserves every existing claim, citation, number, figure, and framework
+    term from the source. Expansion deepens compressed passages, surfaces
+    implied mechanisms, and unpacks evidence; it does NOT introduce new
+    substantive claims the author did not make.
+    """
+    from scribe.expansion import (
+        ExpansionInputError,
+        load_source_document_for_expansion,
+        run_expansion_pipeline,
+        save_source_upload,
+    )
+    from scribe.project import Project
+    from scribe.stages.expander_planner import run_expansion_planner
+    from scribe.parsers.refs import extract_all_refs
+
+    source = source.resolve()
+    if not source.exists():
+        console.print(f"[red]Source not found: {source}[/red]")
+        raise typer.Exit(1)
+
+    project_root = output_dir.resolve() if output_dir else (
+        source.parent / f"{source.stem}_expanded"
+    )
+    project_root.mkdir(parents=True, exist_ok=True)
+    project = Project(project_root)
+    project.ensure_dirs()
+
+    stored_path = save_source_upload(project, source, source.name)
+    console.print(f"[bold]Expanding: {source.name}[/bold]")
+    console.print(f"  Project: {project.root}")
+
+    config = project.config()
+
+    try:
+        if plan_only:
+            document_text, sections = load_source_document_for_expansion(project)
+            current_words = sum(s.word_count for s in sections if s.id != "preamble")
+
+            # Resolve target
+            if target_words and target_words > current_words:
+                final_target = target_words
+                final_multiplier = target_words / max(current_words, 1)
+            elif multiplier and multiplier > 1.0:
+                final_target = int(current_words * multiplier)
+                final_multiplier = multiplier
+            else:
+                final_target = current_words * 2
+                final_multiplier = 2.0
+
+            console.print(
+                f"  {len(sections)} sections, {current_words:,} -> "
+                f"{final_target:,} target ({final_multiplier:.2f}x)\n"
+            )
+            console.print("[cyan]Planning expansion (Opus)...[/cyan]")
+
+            refs = extract_all_refs(project.refs_dir, cache_dir=project.extracted_dir) \
+                if project.refs_dir.exists() else {}
+
+            plan = asyncio.run(run_expansion_planner(
+                project, config, sections, document_text,
+                final_target, final_multiplier, ref_texts=refs,
+            ))
+
+            console.print(
+                f"\n[green]Plan saved[/green]: {len(plan.sections)} sections, "
+                f"{sum(len(s.targets) for s in plan.sections)} expansion targets.\n"
+            )
+            console.print(f"  Plan JSON:    {project.expansion_plan_path}")
+            console.print(f"  Plan summary: {project.expansion_plan_summary_path}")
+            if plan.overall_strategy:
+                console.print(f"\n  [bold]Strategy:[/bold] {plan.overall_strategy}")
+            return
+
+        console.print(
+            f"  Config: parallelism={config.parallelism}, "
+            f"planner={config.reviewer_model_id}, "
+            f"expander={config.executor_model_id}"
+        )
+        if target_words:
+            console.print(f"  Target: {target_words:,} words")
+        elif multiplier:
+            console.print(f"  Multiplier: {multiplier:.2f}x")
+        else:
+            console.print("  Target: 2x (default)")
+        console.print(
+            "\n[cyan]Running expansion pipeline "
+            "(parse -> plan -> expand -> smooth)...[/cyan]\n"
+        )
+
+        summary = asyncio.run(run_expansion_pipeline(
+            project=project,
+            config=config,
+            target_words=target_words,
+            multiplier=multiplier,
+            run_smoother=not no_smooth,
+        ))
+
+        console.print(
+            f"[green]Expansion complete in {_fmt_duration(summary['duration_s'])}[/green]"
+        )
+        console.print(
+            f"  Words: {summary['original_words']:,} -> {summary['expanded_words']:,} "
+            f"(target {summary['target_words']:,}, achieved {summary['achieved_multiplier']:.2f}x)"
+        )
+        console.print(
+            f"  Sections expanded: {summary['sections_expanded']}/{summary['sections_total']}"
+        )
+        if summary['sections_failed']:
+            console.print(
+                f"  [yellow]Failed sections: {summary['sections_failed']} "
+                f"(originals kept)[/yellow]"
+            )
+        console.print(f"\n  Expanded:    {summary['expanded_path']}")
+        console.print(f"  Plan (JSON): {summary['plan_path']}")
+        console.print(f"  Plan (MD):   {summary['plan_summary_path']}")
+
+    except ExpansionInputError as e:
+        console.print(f"[red]Cannot expand: {e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:  # noqa: BLE001 -- show a readable message
+        console.print(f"[red]Expansion pipeline crashed:[/red] {type(e).__name__}: {e}")
+        console.print(
+            f"[yellow]Per-section expansions under {project.expansions_dir} are preserved.[/yellow]"
+        )
+        console.print(
+            "Run with --plan-only to produce a plan without expanding, or retry; "
+            "if the plan exists, it will be reused and only the expand + smooth stages re-run."
+        )
+        raise typer.Exit(1)
+
+
 def _fmt_duration(seconds: float) -> str:
     if seconds < 60:
         return f"{seconds:.0f}s"

@@ -965,12 +965,12 @@ details > *:not(summary) { margin-top: 0.75rem; }
 
 .mode-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1.15rem;
     margin-bottom: 2.5rem;
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 780px) {
     .mode-grid { grid-template-columns: 1fr; }
 }
 
@@ -1007,6 +1007,7 @@ details > *:not(summary) { margin-top: 0.75rem; }
 
 .mode-write { --mode-accent: var(--accent); --mode-glow: rgba(138, 158, 255, 0.14); }
 .mode-revise { --mode-accent: var(--teal); --mode-glow: rgba(98, 207, 196, 0.14); }
+.mode-expand { --mode-accent: var(--coral); --mode-glow: rgba(244, 149, 135, 0.14); }
 .mode-restyle { --mode-accent: var(--gold); --mode-glow: rgba(224, 184, 122, 0.14); }
 
 .mode-icon {
@@ -1083,6 +1084,85 @@ details > *:not(summary) { margin-top: 0.75rem; }
 }
 
 .mode-card:hover .mode-cta .arrow { transform: translateX(4px); }
+
+/* ---- Error-guide card (actionable error with links) ---- */
+
+.error-guide {
+    display: flex;
+    gap: 1rem;
+    padding: 1.25rem 1.4rem;
+    background: linear-gradient(180deg, rgba(240, 196, 99, 0.10), rgba(240, 196, 99, 0.03));
+    border: 1px solid rgba(240, 196, 99, 0.35);
+    border-left: 3px solid var(--warning);
+    border-radius: var(--radius-lg);
+    align-items: flex-start;
+}
+
+.error-guide-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(240, 196, 99, 0.18);
+    color: var(--warning);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1.1rem;
+    font-family: var(--font-serif);
+}
+
+.error-guide h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 0.6rem;
+    letter-spacing: -0.01em;
+}
+
+.error-guide p {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    line-height: 1.55;
+    margin-bottom: 0.75rem;
+}
+
+.error-guide code {
+    font-family: var(--font-mono);
+    font-size: 0.82em;
+    padding: 0.1em 0.4em;
+    background: var(--bg-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    color: var(--text);
+}
+
+.error-guide ol {
+    padding-left: 1.35rem;
+    margin: 0.5rem 0;
+}
+
+.error-guide ol li {
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    line-height: 1.55;
+    padding: 0.35rem 0;
+}
+
+.error-guide ol li::marker {
+    color: var(--warning);
+    font-weight: 600;
+}
+
+.btn-sm {
+    padding: 0.3rem 0.75rem;
+    font-size: 0.82rem;
+    vertical-align: baseline;
+    display: inline-flex;
+    align-items: center;
+    margin: 0 0.25rem;
+}
 
 /* ---- Stage-track progress (revise pipeline) ---- */
 

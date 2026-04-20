@@ -1,0 +1,440 @@
+{% extends "base.html" %}
+{% block title %}Scribe -- Expand{% endblock %}
+
+{% set active_nav = 'expand' %}
+
+{% block content %}
+
+<span class="eyebrow">Expand</span>
+<h2 class="page-title">Deepen an existing draft</h2>
+<p class="page-subtitle">
+    Upload a substantive draft and Scribe will expand it into a longer,
+    more detailed version. Every existing claim, citation, number, and
+    framework term is preserved exactly; only depth is added &mdash;
+    unpacking compressed passages, surfacing evidence, spelling out
+    mechanisms, addressing implied counter-arguments.
+</p>
+
+{% if expand_state.status in ['idle', 'done', 'error'] %}
+
+<form action="/expand_start" method="POST" enctype="multipart/form-data" id="expand-form">
+
+    <div class="card card-feature">
+        <h2>Output folder</h2>
+        <div class="form-row">
+            <label for="output_folder">Where to put the expanded document and plan</label>
+            <div class="input-with-browse">
+                <input type="text" id="output_folder" name="output_folder"
+                       placeholder="Pick where Scribe should save the expanded document..." required>
+                <button type="button" class="btn btn-secondary" onclick="pickFolder()">
+                    Browse...
+                </button>
+            </div>
+            <p class="hint">
+                A new folder will be created if needed. Outputs:
+                <span class="mono">expanded.md</span> and
+                <span class="mono">.scribe/expansion_plan.md</span>.
+            </p>
+        </div>
+    </div>
+
+    <div class="split">
+
+        <div class="card">
+            <h2>Source draft <span class="tag tag-accent">required</span></h2>
+            <label class="dropzone" id="source-dropzone">
+                <div class="dropzone-icon">+</div>
+                <div class="dropzone-label">Drop your draft here or click to browse</div>
+                <div class="dropzone-hint">.md, .docx, .doc, .txt</div>
+                <div class="dropzone-filelist" id="source-files"></div>
+                <input type="file" id="source" name="source"
+                       accept=".md,.markdown,.txt,.doc,.docx" required
+                       onchange="updateDropzoneFiles(this, 'source-files')">
+            </label>
+            <p class="hint mt-1">
+                Substantive draft with headings and citations (1,500+ words).
+                Short outlines are rejected &mdash; for those, use
+                <a href="/new">New project</a>.
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>Target length</h2>
+            <div class="radio-group">
+                <label>
+                    <input type="radio" name="target_mode" value="multiplier" checked
+                           onchange="toggleTargetMode()">
+                    <span>Multiplier</span>
+                </label>
+                <label>
+                    <input type="radio" name="target_mode" value="target_words"
+                           onchange="toggleTargetMode()">
+                    <span>Exact word count</span>
+                </label>
+            </div>
+            <div id="target-multiplier-row" class="form-row">
+                <label for="multiplier">Multiplier</label>
+                <input type="number" id="multiplier" name="multiplier"
+                       value="2.0" min="1.1" max="5.0" step="0.1">
+                <p class="hint">e.g. 2.0 doubles the length. Expect Scribe
+                    to weight the budget toward the most compressed sections,
+                    not spread it uniformly.</p>
+            </div>
+            <div id="target-words-row" class="form-row" style="display: none;">
+                <label for="target_words">Target word count</label>
+                <input type="number" id="target_words" name="target_words"
+                       min="2000" step="500" placeholder="e.g. 15000">
+                <p class="hint">Total words for the expanded document. Must
+                    exceed the source; otherwise the multiplier is used.</p>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="split">
+
+        <div class="card">
+            <h2>Style <span class="tag">optional</span></h2>
+            <div class="radio-group">
+                <label>
+                    <input type="radio" name="style_choice" value="builtin" checked
+                           onchange="toggleStyleUpload()">
+                    <span>Built-in academic</span>
+                </label>
+                <label>
+                    <input type="radio" name="style_choice" value="upload"
+                           onchange="toggleStyleUpload()">
+                    <span>Upload custom</span>
+                </label>
+            </div>
+            <div id="style_upload_area" style="display: none;">
+                <label class="dropzone compact">
+                    <div class="flex">
+                        <div class="dropzone-icon">+</div>
+                        <div>
+                            <div class="dropzone-label">Drop style guide here</div>
+                            <div class="dropzone-hint">.md, .docx, .txt</div>
+                        </div>
+                    </div>
+                    <div class="dropzone-filelist" id="style-files"></div>
+                    <input type="file" id="style_guide" name="style_guide"
+                           accept=".md,.txt,.markdown,.doc,.docx"
+                           onchange="updateDropzoneFiles(this, 'style-files')">
+                </label>
+            </div>
+            <div id="style_builtin_info">
+                <p class="hint">
+                    Uses the unified academic writing rules. Built-in always on.
+                </p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Reference material <span class="tag">optional</span></h2>
+            <label class="dropzone" id="refs-dropzone">
+                <div class="dropzone-icon">+</div>
+                <div class="dropzone-label">Drop source documents for added depth</div>
+                <div class="dropzone-hint">PDF, DOCX, XLSX, MD, TXT, CSV &middot; multiple ok</div>
+                <div class="dropzone-filelist" id="refs-files"></div>
+                <input type="file" id="refs" name="refs" multiple
+                       accept=".pdf,.docx,.xlsx,.md,.txt,.csv"
+                       onchange="updateDropzoneFiles(this, 'refs-files', true)">
+            </label>
+            <p class="hint mt-1">
+                The expander may draw on these for deeper context and add
+                citations &mdash; but only from these files, never invented.
+            </p>
+        </div>
+
+    </div>
+
+    <div class="card card-ghost">
+        <details>
+            <summary>What Expand will and won't do</summary>
+            <div class="revise-guarantee">
+                <div class="guarantee-col">
+                    <h4 class="guarantee-heading guarantee-keep">Preserved exactly</h4>
+                    <ul>
+                        <li>Every existing claim and its stance</li>
+                        <li>Every citation, number, percentage, date, unit</li>
+                        <li>Every figure and table reference</li>
+                        <li>Your terminology, framework, and coined constructs</li>
+                        <li>Section structure and heading hierarchy</li>
+                    </ul>
+                </div>
+                <div class="guarantee-col">
+                    <h4 class="guarantee-heading guarantee-change">Added depth</h4>
+                    <ul>
+                        <li>Unpack compressed claims into their mechanisms</li>
+                        <li>Surface evidence implied but not stated</li>
+                        <li>Address counter-arguments that belong in scope</li>
+                        <li>Define assumed terms; spell out methodology</li>
+                        <li>Add context where claims start cold</li>
+                    </ul>
+                </div>
+            </div>
+            <p class="hint mt-2">
+                <strong>Never:</strong> invent sources, add claims the author
+                didn't make, drift from the original thesis, or contradict any
+                existing statement.
+            </p>
+        </details>
+    </div>
+
+    <div class="actions">
+        <button type="submit" class="btn btn-primary btn-cta">Start expansion</button>
+        <a href="/" class="btn btn-ghost">Cancel</a>
+    </div>
+
+</form>
+
+{% endif %}
+
+{% if expand_state.status not in ['idle'] %}
+
+<div class="card card-feature">
+    <div class="flex-between" style="margin-bottom: 1rem;">
+        <h2 style="margin-bottom: 0;">Expansion progress</h2>
+        <span class="status-badge status-{{ expand_state.status }}">{{ expand_state.status }}</span>
+    </div>
+
+    <div class="stage-track" id="stage-track"
+         data-status="{{ expand_state.status }}"
+         data-progress="{{ expand_state.progress }}">
+        <div class="stage" data-stage="parse" data-min="0" data-max="9">
+            <div class="stage-dot">1</div>
+            <div class="stage-label">Parse</div>
+            <div class="stage-detail">Split into sections</div>
+        </div>
+        <div class="stage-bar"><span></span></div>
+        <div class="stage" data-stage="plan" data-min="10" data-max="29">
+            <div class="stage-dot">2</div>
+            <div class="stage-label">Plan</div>
+            <div class="stage-detail">Opus identifies depth targets</div>
+        </div>
+        <div class="stage-bar"><span></span></div>
+        <div class="stage" data-stage="expand" data-min="30" data-max="87">
+            <div class="stage-dot">3</div>
+            <div class="stage-label">Expand</div>
+            <div class="stage-detail">Sonnet, parallel sections</div>
+        </div>
+        <div class="stage-bar"><span></span></div>
+        <div class="stage" data-stage="smooth" data-min="88" data-max="100">
+            <div class="stage-dot">4</div>
+            <div class="stage-label">Smooth</div>
+            <div class="stage-detail">Transitions and consistency</div>
+        </div>
+    </div>
+
+    <div class="progress-summary" style="margin-top: 1.25rem;">
+        <div class="flex-between" style="margin-bottom: 0.35rem; font-size: 0.85rem;">
+            <span id="status-msg">{{ expand_state.message }}</span>
+            <span id="status-pct" class="mono muted">{{ expand_state.progress }}%</span>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill {% if expand_state.status == 'done' %}done{% endif %}"
+                 id="progress-fill"
+                 style="width: {{ expand_state.progress }}%"></div>
+        </div>
+        {% if expand_state.sections_total > 0 %}
+        <p class="hint" id="sections-info" style="margin-top: 0.35rem;">
+            Sections: <span id="sections-done">{{ expand_state.sections_done }}</span>
+            / {{ expand_state.sections_total }} expanded
+            {% if expand_state.target_words %}
+            &middot; target <span class="mono">{{ "{:,}".format(expand_state.target_words) }}</span> words
+            {% endif %}
+        </p>
+        {% endif %}
+    </div>
+
+    {% if expand_state.status == 'error' and expand_state.error %}
+    <div class="flash flash-error" style="margin-top: 1rem; white-space: pre-wrap; font-family: var(--font-mono); font-size: 0.78rem;">{{ expand_state.error[:2000] }}</div>
+    {% endif %}
+
+    {% if expand_state.status == 'done' and expand_state.expanded_path %}
+    <div class="revision-result">
+        <div class="stat-grid" style="margin-bottom: 1rem;">
+            <div class="stat-card">
+                <div class="value">{{ "{:,}".format(expand_state.original_words) }}</div>
+                <div class="label">Words in</div>
+            </div>
+            <div class="stat-card">
+                <div class="value">{{ "{:,}".format(expand_state.expanded_words) }}</div>
+                <div class="label">Words out</div>
+            </div>
+            <div class="stat-card">
+                <div class="value">{{ "%.2f"|format(expand_state.achieved_multiplier) }}x</div>
+                <div class="label">Achieved</div>
+            </div>
+            <div class="stat-card">
+                <div class="value">{{ expand_state.sections_done }}/{{ expand_state.sections_total }}</div>
+                <div class="label">Sections</div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <a href="/expand_download" class="btn btn-primary">&darr; Expanded document</a>
+            <a href="/expand_download_plan" class="btn btn-secondary">&darr; Expansion plan</a>
+            <a href="/expand" class="btn btn-ghost">New expansion</a>
+        </div>
+        <p class="hint mt-2">
+            Files saved at <span class="mono">{{ expand_state.expanded_path }}</span>.
+        </p>
+    </div>
+    {% endif %}
+
+    <details style="margin-top: 1.5rem;">
+        <summary>Activity log</summary>
+        <div class="log-box" id="log-box" style="margin-top: 0.75rem;">
+            {% for line in expand_state.log %}
+            <p>{{ line }}</p>
+            {% endfor %}
+        </div>
+    </details>
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let polling = null;
+
+function toggleTargetMode() {
+    const mode = document.querySelector('input[name="target_mode"]:checked').value;
+    document.getElementById('target-multiplier-row').style.display = mode === 'multiplier' ? 'block' : 'none';
+    document.getElementById('target-words-row').style.display = mode === 'target_words' ? 'block' : 'none';
+}
+
+function toggleStyleUpload() {
+    const choice = document.querySelector('input[name="style_choice"]:checked').value;
+    document.getElementById('style_upload_area').style.display = choice === 'upload' ? 'block' : 'none';
+    document.getElementById('style_builtin_info').style.display = choice === 'builtin' ? 'block' : 'none';
+}
+
+async function pickFolder() {
+    try {
+        const resp = await fetch('/api/pick_folder', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({title: 'Choose expanded-document folder'})
+        });
+        const data = await resp.json();
+        if (data.path) document.getElementById('output_folder').value = data.path;
+    } catch (e) {
+        console.error('Folder picker failed:', e);
+    }
+}
+
+function updateDropzoneFiles(input, containerId, multiple = false) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const files = Array.from(input.files || []);
+    container.innerHTML = files.map((f, i) =>
+        `<span class="dropzone-filepill">
+            ${escapeHtml(f.name)}
+            <span class="remove" title="Remove" onclick="removeFile('${input.id}', ${i})">&times;</span>
+        </span>`
+    ).join('');
+}
+
+function removeFile(inputId, idx) {
+    const input = document.getElementById(inputId);
+    const dt = new DataTransfer();
+    Array.from(input.files).forEach((f, i) => { if (i !== idx) dt.items.add(f); });
+    input.files = dt.files;
+    const container = input.closest('.dropzone').querySelector('.dropzone-filelist');
+    if (container) updateDropzoneFiles(input, container.id, input.multiple);
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+}
+
+document.querySelectorAll('.dropzone').forEach(zone => {
+    ['dragenter', 'dragover'].forEach(ev =>
+        zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.add('dragover'); }));
+    ['dragleave', 'drop'].forEach(ev =>
+        zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.remove('dragover'); }));
+});
+
+function updateStageTrack(progress, status) {
+    const track = document.getElementById('stage-track');
+    if (!track) return;
+    const stages = track.querySelectorAll('.stage');
+    const bars = track.querySelectorAll('.stage-bar');
+    stages.forEach(s => {
+        const min = parseInt(s.dataset.min, 10);
+        const max = parseInt(s.dataset.max, 10);
+        s.classList.remove('active', 'done');
+        if (progress >= max) s.classList.add('done');
+        else if (progress >= min) s.classList.add('active');
+    });
+    bars.forEach((b, i) => {
+        const next = stages[i + 1];
+        b.classList.remove('active', 'done');
+        if (next && next.classList.contains('done')) b.classList.add('done');
+        else if (next && next.classList.contains('active')) b.classList.add('active');
+    });
+    if (status === 'done') {
+        stages.forEach(s => { s.classList.remove('active'); s.classList.add('done'); });
+        bars.forEach(b => { b.classList.remove('active'); b.classList.add('done'); });
+    }
+    if (status === 'error') {
+        const active = track.querySelector('.stage.active');
+        if (active) active.classList.add('error');
+    }
+}
+
+function startPolling() {
+    if (polling) return;
+    polling = setInterval(async () => {
+        try {
+            const resp = await fetch('/expand_status');
+            const data = await resp.json();
+
+            const msg = document.getElementById('status-msg');
+            if (msg) msg.textContent = data.message;
+            const pct = document.getElementById('status-pct');
+            if (pct) pct.textContent = data.progress + '%';
+            const fill = document.getElementById('progress-fill');
+            if (fill) fill.style.width = data.progress + '%';
+
+            const done = document.getElementById('sections-done');
+            if (done) done.textContent = data.sections_done;
+
+            const logBox = document.getElementById('log-box');
+            if (logBox && data.log) {
+                logBox.innerHTML = data.log.map(l => '<p>' + escapeHtml(l) + '</p>').join('');
+                logBox.scrollTop = logBox.scrollHeight;
+            }
+
+            updateStageTrack(data.progress || 0, data.status);
+            if (fill && data.status === 'done') fill.classList.add('done');
+
+            if (['done','error','idle'].includes(data.status)) {
+                clearInterval(polling);
+                polling = null;
+                if (data.status === 'done' || data.status === 'error') {
+                    setTimeout(() => location.reload(), 1200);
+                }
+            }
+        } catch (e) {
+            console.error('Poll failed:', e);
+        }
+    }, 2000);
+}
+
+const track = document.getElementById('stage-track');
+if (track) {
+    updateStageTrack(parseInt(track.dataset.progress || '0', 10),
+                     track.dataset.status || 'idle');
+}
+
+const currentStatus = '{{ expand_state.status }}';
+if (['parsing','planning','expanding','smoothing'].includes(currentStatus)) {
+    startPolling();
+}
+</script>
+{% endblock %}

@@ -195,6 +195,75 @@ class SectionRevision(BaseModel):
     preserved_citations: list[str] = Field(default_factory=list)
 
 
+# --- Expansion planning ---
+
+
+class ExpansionTarget(BaseModel):
+    """A specific opportunity to add depth to a section."""
+    category: str
+    # e.g. "underdeveloped_claim", "missing_example", "thin_evidence",
+    # "citation_needs_unpacking", "counterargument_missing",
+    # "methodology_brief", "mechanism_compressed", "context_missing"
+    current_text: str = ""
+    # short quote of the compressed passage the expansion targets
+    opportunity: str
+    # what depth could be added here, in 1-2 sentences
+    suggested_words: int = 0
+    # rough budget for this specific expansion
+
+
+class SectionExpansion(BaseModel):
+    """Expansion plan for a single section."""
+    section_id: str
+    section_title: str
+    structural_role: str = ""
+    current_words: int = 0
+    target_words: int = 0
+    preserve_notes: list[str] = Field(default_factory=list)
+    # Non-negotiable items (claims, data, framework terms, citations) that
+    # the expander must carry forward untouched.
+    targets: list[ExpansionTarget] = Field(default_factory=list)
+    expansion_strategy: str = ""
+    # A 1-2 sentence description of the shape of the expansion for this section
+
+
+class DocumentExpansion(BaseModel):
+    """The overall expansion plan for a document."""
+    source_title: str = ""
+    current_total_words: int = 0
+    target_total_words: int = 0
+    multiplier: float = 1.0
+    overall_strategy: str = ""
+    # Narrative: how the expansion deepens the paper without drifting from
+    # the author's thesis.
+    preserved_framework: list[str] = Field(default_factory=list)
+    # Key terms, classifications, or constructs the author coined that must
+    # survive expansion unchanged (e.g. "stabilisation vs explosion camps").
+    sections: list[SectionExpansion] = Field(default_factory=list)
+
+    def save(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            self.model_dump_json(indent=2),
+            encoding="utf-8",
+        )
+
+    @classmethod
+    def load(cls, path: Path) -> DocumentExpansion:
+        return cls.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+class SectionExpansionResult(BaseModel):
+    """Result of expanding a single section."""
+    section_id: str
+    section_title: str
+    original_words: int = 0
+    expanded_words: int = 0
+    target_words: int = 0
+    expanded_text: str = ""
+    preserved_citations: list[str] = Field(default_factory=list)
+
+
 # --- Run state ---
 
 
