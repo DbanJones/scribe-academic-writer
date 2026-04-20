@@ -45,6 +45,10 @@ class Project:
 
     def __init__(self, root: Path) -> None:
         self.root = root.resolve()
+        # Per-instance memo for list_refs. The cache key is the refs_dir
+        # mtime_ns: if anyone adds/removes a file the directory mtime bumps
+        # and we re-scan.
+        self._refs_cache: tuple[int, list[Path]] | None = None
 
     # --- Input paths ---
 
@@ -90,6 +94,30 @@ class Project:
     @property
     def review_summary_path(self) -> Path:
         return self.scribe_dir / "document_review.md"
+
+    # --- Revision mode paths ---
+
+    @property
+    def audit_path(self) -> Path:
+        return self.scribe_dir / "audit.json"
+
+    @property
+    def audit_summary_path(self) -> Path:
+        return self.scribe_dir / "audit.md"
+
+    @property
+    def revisions_dir(self) -> Path:
+        return self.scribe_dir / "revisions"
+
+    @property
+    def revised_path(self) -> Path:
+        return self.root / "revised.md"
+
+    @property
+    def source_document_path(self) -> Path:
+        """Where an uploaded source document is stored for revision mode."""
+        # Preferred location; actual extension handled at upload time.
+        return self.root / "source.md"
 
     @property
     def plan_path(self) -> Path:
@@ -157,10 +185,19 @@ class Project:
 
     def list_refs(self) -> list[Path]:
         if not self.refs_dir.exists():
+            self._refs_cache = None
             return []
-        return sorted(
-            p for p in self.refs_dir.rglob("*") if p.is_file()
-        )
+        try:
+            mtime = self.refs_dir.stat().st_mtime_ns
+        except OSError:
+            mtime = 0
+
+        if self._refs_cache and self._refs_cache[0] == mtime:
+            return list(self._refs_cache[1])
+
+        refs = sorted(p for p in self.refs_dir.rglob("*") if p.is_file())
+        self._refs_cache = (mtime, refs)
+        return list(refs)
 
     def draft_path(self, chunk: Chunk) -> Path:
         slug = chunk.title.lower().replace(" ", "_")[:30]
@@ -177,6 +214,7 @@ class Project:
             self.cache_dir,
             self.extracted_dir,
             self.runs_dir,
+            self.revisions_dir,
         ]:
             d.mkdir(parents=True, exist_ok=True)
 

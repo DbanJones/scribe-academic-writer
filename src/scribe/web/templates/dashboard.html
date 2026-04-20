@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Scribe -- Dashboard{% endblock %}
+
+{% set active_nav = 'dashboard' %}
+
+{% block content %}
+
+<div class="welcome">
+    <h2 class="page-title">What are you working on?</h2>
+    <p class="page-subtitle">
+        Three modes, picked by where you are in the writing process.
+        Each uses Claude against the same unified academic writing rules
+        (Allwood, Williams, Pinker, Sword, Schimel, Zinsser, et al.).
+    </p>
+</div>
+
+<div class="mode-grid">
+
+    <a class="mode-card mode-write" href="/new">
+        <div class="mode-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9"/>
+                <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4Z"/>
+            </svg>
+        </div>
+        <div class="mode-body">
+            <span class="eyebrow">Write</span>
+            <h3>Start a new paper</h3>
+            <p>You have an outline and sources. Scribe analyses the thesis,
+               plans chunks, writes sections in parallel, and stitches them.</p>
+            <p class="mode-when"><strong>Use when:</strong> you have
+                a structured outline (headings and bullets) and reference
+                material, but no prose yet.</p>
+        </div>
+        <div class="mode-cta">New project <span class="arrow">&rarr;</span></div>
+    </a>
+
+    <a class="mode-card mode-revise" href="/revise">
+        <div class="mode-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
+                <path d="M14 2v6h6"/>
+                <path d="m16 13-3.5 3.5-2-2L8 17"/>
+            </svg>
+        </div>
+        <div class="mode-body">
+            <span class="eyebrow">Revise</span>
+            <h3>Improve an existing draft</h3>
+            <p>Audit a finished document against the writing rules, then
+               revise it section by section. Every citation, number, claim,
+               and figure is preserved exactly.</p>
+            <p class="mode-when"><strong>Use when:</strong> you've already
+                written a draft (1,500+ words with headings and citations) and
+                want it sharper without losing your argument.</p>
+        </div>
+        <div class="mode-cta">Revise a document <span class="arrow">&rarr;</span></div>
+    </a>
+
+    <a class="mode-card mode-restyle" href="/restyle">
+        <div class="mode-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/>
+                <path d="M9 7h7"/>
+                <path d="M9 11h5"/>
+            </svg>
+        </div>
+        <div class="mode-body">
+            <span class="eyebrow">Restyle</span>
+            <h3>Change citation style</h3>
+            <p>Convert any finished paper between Harvard, IEEE, APA, Nature,
+               Vancouver, Chicago, or a journal-specific preset you define.</p>
+            <p class="mode-when"><strong>Use when:</strong> the document is
+                done but the target journal wants a different citation format.</p>
+        </div>
+        <div class="mode-cta">Open restyler <span class="arrow">&rarr;</span></div>
+    </a>
+
+</div>
+
+<div class="section-header">
+    <h3>Recent projects</h3>
+    {% if recents %}
+    <span class="muted small">{{ recents|length }} project{{ 's' if recents|length != 1 else '' }}</span>
+    {% endif %}
+</div>
+
+{% if recents %}
+<div class="project-grid">
+    {% for p in recents %}
+    <a class="project-card" href="/project?project_dir={{ p.path }}">
+        <button type="button" class="remove-btn" title="Remove from list"
+                onclick="event.preventDefault(); event.stopPropagation(); removeRecent('{{ p.path | e }}');">&times;</button>
+        <h3>{{ p.name }}</h3>
+        <div class="project-path">{{ p.path }}</div>
+        <div class="project-card-footer">
+            <span>
+                {% if p.has_final %}
+                    <span class="tag tag-accent">{{ "{:,}".format(p.final_words) }} words</span>
+                {% elif p.has_plan %}
+                    <span class="tag tag-teal">planned</span>
+                {% else %}
+                    <span class="tag">setup</span>
+                {% endif %}
+            </span>
+            <span title="Last opened">{{ p.opened_at | time_ago }}</span>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <h3>No projects yet</h3>
+    <p>Pick a mode above to get started. Everything you create lives in your
+       own folders; Scribe doesn't store anything on a server.</p>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function removeRecent(path) {
+    await fetch('/api/recent/remove', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({path})
+    });
+    location.reload();
+}
+</script>
+{% endblock %}

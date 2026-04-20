@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
+import tempfile
 import threading
 import time
 from datetime import datetime
@@ -17,12 +18,16 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     url_for,
 )
 
+from scribe import auth as scribe_auth
+from scribe import recent as scribe_recent
 from scribe.config import ScribeConfig
 from scribe.models import Plan
 from scribe.project import Project
+from scribe.web import picker as scribe_picker
 
 app = Flask(
     __name__,
@@ -30,6 +35,51 @@ app = Flask(
     static_folder=str(Path(__file__).parent / "static"),
 )
 app.secret_key = "scribe-web-session-key"
+
+
+@app.context_processor
+def _inject_auth_status():
+    """Make auth info available to every template (for the masthead badge)."""
+    try:
+        return {"auth_status": scribe_auth.check_login()}
+    except Exception:
+        return {"auth_status": {"installed": False, "logged_in": False}}
+
+
+@app.template_filter("time_ago")
+def _time_ago(ts):
+    """Render a Unix timestamp as a relative 'n minutes ago' string."""
+    try:
+        delta = time.time() - float(ts or 0)
+    except (TypeError, ValueError):
+        return ""
+    if delta < 60:
+        return "just now"
+    if delta < 3600:
+        m = int(delta // 60)
+        return f"{m}m ago"
+    if delta < 86400:
+        h = int(delta // 3600)
+        return f"{h}h ago"
+    if delta < 2592000:
+        d = int(delta // 86400)
+        return f"{d}d ago"
+    mo = int(delta // 2592000)
+    return f"{mo}mo ago"
+
+
+def _require_login_json():
+    """Return a 401 JSON response if the user is not logged in, else None."""
+    status = scribe_auth.check_login()
+    if not status.get("logged_in"):
+        return (
+            jsonify({
+                "error": "Not logged in. Visit /login and click 'Login with Claude'.",
+                "redirect": "/login",
+            }),
+            401,
+        )
+    return None
 
 # In-memory state for tracking runs
 _run_state: dict = {
@@ -59,6 +109,27 @@ def _add_log(msg: str):
             _run_state["log"] = _run_state["log"][-100:]
 
 
+# (path_str, mtime_ns) -> DocumentReview. Bounded by review-file identity so
+# a fresh review invalidates automatically.
+_DOC_REVIEW_CACHE: dict[tuple[str, int], "object"] = {}
+
+
+def _load_doc_review_cached(path: Path):
+    from scribe.models import DocumentReview
+    try:
+        mtime = path.stat().st_mtime_ns
+    except OSError:
+        return DocumentReview.load(path)
+    key = (str(path), mtime)
+    cached = _DOC_REVIEW_CACHE.get(key)
+    if cached is not None:
+        return cached
+    review = DocumentReview.load(path)
+    _DOC_REVIEW_CACHE.clear()  # Keep the cache tiny; we only ever need the latest.
+    _DOC_REVIEW_CACHE[key] = review
+    return review
+
+
 def _get_builtin_styles() -> list[dict]:
     """List available built-in style guides."""
     from importlib import resources as pkg_resources
@@ -78,8 +149,20 @@ def _get_builtin_styles() -> list[dict]:
 
 @app.route("/")
 def index():
+    """Dashboard: recent projects + CTAs."""
+    recents = scribe_recent.load()
+    return render_template("dashboard.html", recents=recents, active_nav="dashboard")
+
+
+@app.route("/new")
+def new_project_view():
     styles = _get_builtin_styles()
-    return render_template("index.html", builtin_styles=styles, run_state=_run_state)
+    return render_template(
+        "new_project.html",
+        builtin_styles=styles,
+        run_state=_run_state,
+        active_nav="new",
+    )
 
 
 @app.route("/create", methods=["POST"])
@@ -94,6 +177,7 @@ def create_project():
 
     # Create or load project
     project = Project.scaffold(output_path)
+    scribe_recent.touch(output_path, name=request.form.get("project_name") or None)
 
     # Handle outline upload
     outline_file = request.files.get("outline")
@@ -172,6 +256,9 @@ def project_view():
         flash(f"No outline found in {project_dir}", "error")
         return redirect(url_for("index"))
 
+    # Record this project in the recent list so dashboard stays up to date.
+    scribe_recent.touch(project_path)
+
     config = project.config()
 
     # Gather project info
@@ -197,8 +284,7 @@ def project_view():
     doc_review = None
     if project.review_path.exists():
         try:
-            from scribe.models import DocumentReview
-            doc_review = DocumentReview.load(project.review_path)
+            doc_review = _load_doc_review_cached(project.review_path)
         except Exception:
             pass
 
@@ -219,6 +305,10 @@ def project_view():
 @app.route("/run", methods=["POST"])
 def run_pipeline():
     """Start the full pipeline in a background thread."""
+    gate = _require_login_json()
+    if gate is not None:
+        return gate
+
     project_dir = request.form.get("project_dir", "")
     skip_review = request.form.get("skip_review") == "on"
 
@@ -369,6 +459,625 @@ def upload_refs():
 
     flash(f"{count} reference file(s) uploaded.", "success")
     return redirect(url_for("project_view", project_dir=project_dir))
+
+
+# ---------------------------------------------------------------------------
+# Restyle / citation-engine routes
+# ---------------------------------------------------------------------------
+
+_restyle_state: dict = {
+    "status": "idle",  # idle, extracting, polishing, done, error
+    "message": "",
+    "progress": 0,
+    "log": [],
+    "output_path": None,
+    "in_text_count": 0,
+    "bibliography_count": 0,
+    "error": None,
+}
+_restyle_lock = threading.Lock()
+
+
+def _rs_update(**kwargs):
+    with _restyle_lock:
+        _restyle_state.update(kwargs)
+
+
+def _rs_log(msg: str):
+    with _restyle_lock:
+        _restyle_state["log"].append(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+        if len(_restyle_state["log"]) > 120:
+            _restyle_state["log"] = _restyle_state["log"][-120:]
+
+
+@app.route("/restyle")
+def restyle_view():
+    from scribe.citations import SCHEMA_FIELDS, list_styles
+
+    styles = list_styles()
+    return render_template(
+        "restyle.html",
+        styles=styles,
+        schema=SCHEMA_FIELDS,
+        run_state=_restyle_state,
+    )
+
+
+@app.route("/styles")
+def styles_view():
+    """Alias: the Styles nav link just takes you to the restyle page."""
+    return redirect(url_for("restyle_view"))
+
+
+@app.route("/api/preview", methods=["POST"])
+def api_preview():
+    """Render a sample citation in the chosen style with optional overrides."""
+    from scribe.citations import load_style, render_bibliography_entry, render_in_text
+    from scribe.citations.engine import _deep_merge, diff_against_parent
+
+    data = request.get_json() or {}
+    style_id = data.get("style_id", "harvard")
+    overrides = data.get("overrides", {}) or {}
+    sample = data.get("sample") or {}
+    sample_book = data.get("sample_book") or {}
+
+    if style_id == "__custom__":
+        # Build an ad-hoc style from overrides on top of harvard as a sensible default.
+        base = load_style("harvard")
+    else:
+        try:
+            base = load_style(style_id)
+        except FileNotFoundError:
+            return jsonify({"error": f"Unknown style: {style_id}"}), 400
+
+    override_tree: dict = {}
+    for dotted, value in overrides.items():
+        cur = override_tree
+        parts = dotted.split(".")
+        for p in parts[:-1]:
+            cur = cur.setdefault(p, {})
+        # Coerce booleans/numbers
+        if isinstance(value, str):
+            if value.isdigit():
+                value = int(value)
+            elif value.lower() in ("true", "false"):
+                value = value.lower() == "true"
+        cur[parts[-1]] = value
+
+    style = _deep_merge(base, override_tree)
+    style["styleName"] = base.get("styleName", style_id)
+
+    try:
+        intext = render_in_text(sample, style, num=12)
+        narrative = render_in_text(sample, style, num=12, narrative=True)
+        bib_journal = render_bibliography_entry(sample, style) if sample else ""
+        bib_book = render_bibliography_entry(sample_book, style) if sample_book else ""
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    diffs = []
+    if style_id != "__custom__":
+        diffs = diff_against_parent(style_id)
+
+    return jsonify({
+        "intext": intext,
+        "narrative": narrative,
+        "bib_journal": bib_journal,
+        "bib_book": bib_book,
+        "style_name": style.get("styleName"),
+        "style_description": style.get("styleDescription", ""),
+        "parent": style.get("parent"),
+        "diffs": diffs,
+    })
+
+
+@app.route("/api/save_preset", methods=["POST"])
+def api_save_preset():
+    from scribe.citations.schema import build_custom_style, save_custom_style
+
+    data = request.get_json() or {}
+    style_id = (data.get("style_id") or "").strip()
+    if not style_id:
+        return jsonify({"error": "Preset id is required"}), 400
+
+    try:
+        style_data = build_custom_style(
+            style_id=style_id,
+            style_name=data.get("style_name") or style_id,
+            parent=data.get("parent") or None,
+            form_values=data.get("overrides") or {},
+            additional_rules=data.get("additional_rules") or "",
+        )
+        path = save_custom_style(style_data)
+    except (ValueError, OSError) as e:
+        return jsonify({"error": str(e)}), 400
+
+    return jsonify({"style_id": style_data["styleId"], "path": str(path)})
+
+
+@app.route("/restyle_run", methods=["POST"])
+def restyle_run():
+    gate = _require_login_json()
+    if gate is not None:
+        return gate
+
+    paper = request.files.get("paper")
+    paper_path = (request.form.get("paper_path") or "").strip()
+    if not paper_path and (not paper or not paper.filename):
+        return "No paper provided", 400
+    if paper_path and not Path(paper_path).is_file():
+        return f"Path does not exist or is not a file: {paper_path}", 400
+
+    style_id = request.form.get("style", "harvard")
+    model_short = request.form.get("model", "opus")
+    skip_polish = request.form.get("skip_polish") == "on"
+    output_name = (request.form.get("output_name") or "").strip()
+    additional_rules = request.form.get("additional_rules", "")
+
+    # If style is "__custom__", auto-save under a timestamped id so the engine can load it.
+    if style_id == "__custom__":
+        from scribe.citations.schema import build_custom_style, save_custom_style
+
+        custom_id = request.form.get("custom_id") or f"tmp-{int(time.time())}"
+        overrides = {
+            k.replace("override__", ""): v
+            for k, v in request.form.items()
+            if k.startswith("override__") and v
+        }
+        style_data = build_custom_style(
+            style_id=custom_id,
+            style_name=request.form.get("custom_name") or custom_id,
+            parent=request.form.get("custom_parent") or "harvard",
+            form_values=overrides,
+            additional_rules=additional_rules,
+        )
+        save_custom_style(style_data)
+        style_id = style_data["styleId"]
+
+    if _restyle_state["status"] in ("extracting", "polishing"):
+        return jsonify({"error": "A restyle is already in progress"}), 409
+
+    # Resolve the input. Server-side path wins over upload (faster, no copy).
+    if paper_path:
+        input_path = Path(paper_path).expanduser().resolve()
+        tmp_dir = input_path.parent
+        source_label = str(input_path)
+    else:
+        tmp_dir = Path(tempfile.mkdtemp(prefix="scribe-restyle-"))
+        suffix = Path(paper.filename).suffix.lower() or ".md"
+        input_path = tmp_dir / f"input{suffix}"
+        paper.save(str(input_path))
+        source_label = paper.filename
+
+    output_path = None
+    if output_name:
+        output_path = tmp_dir / output_name
+
+    _rs_update(
+        status="extracting",
+        message="Extracting citations...",
+        progress=5,
+        log=[],
+        output_path=None,
+        in_text_count=0,
+        bibliography_count=0,
+        error=None,
+    )
+    _rs_log(f"Input: {source_label}")
+    _rs_log(f"Target style: {style_id}")
+
+    thread = threading.Thread(
+        target=_restyle_thread,
+        args=(input_path, style_id, model_short, output_path, additional_rules, skip_polish),
+        daemon=True,
+    )
+    thread.start()
+
+    return jsonify({"status": "started"})
+
+
+def _restyle_thread(
+    input_path: Path,
+    style_id: str,
+    model_short: str,
+    output_path: Path | None,
+    additional_rules: str,
+    skip_polish: bool,
+):
+    try:
+        from scribe.citations.restyler import restyle_document
+        cfg = ScribeConfig()
+        model_id = cfg.resolve_model(model_short)
+
+        async def _progress(event: str, payload: dict):
+            if event == "document_read":
+                _rs_update(progress=15, message="Document read, calling Claude to extract citations...")
+                _rs_log(f"Document read: {payload.get('chars', 0)} chars ({payload.get('kind')})")
+            elif event == "citations_extracted":
+                _rs_update(progress=55, status="polishing",
+                           message=f"{payload.get('in_text')} citations, {payload.get('references')} refs extracted.")
+                _rs_log(f"Extraction done: {payload.get('in_text')} in-text, {payload.get('references')} references")
+            elif event == "bibliography_built":
+                _rs_update(progress=70, message=f"Rebuilt {payload.get('count')} references.")
+                _rs_log(f"Bibliography rebuilt: {payload.get('count')} entries")
+            elif event == "polishing":
+                _rs_update(progress=80, status="polishing", message="Polishing formatting rules...")
+                _rs_log("Polish pass started")
+            elif event == "done":
+                _rs_log(f"Output: {payload.get('output')}")
+
+        result = asyncio.run(restyle_document(
+            input_path,
+            style_id=style_id,
+            output_path=output_path,
+            extra_rules=additional_rules,
+            model=model_id,
+            skip_polish=skip_polish,
+            progress=_progress,
+        ))
+        _rs_update(
+            status="done",
+            progress=100,
+            message=f"Done! {result.in_text_count} citations, {result.bibliography_count} references.",
+            output_path=str(result.output_path),
+            in_text_count=result.in_text_count,
+            bibliography_count=result.bibliography_count,
+        )
+        _rs_log(f"Finished in {result.duration_s:.1f}s, cost ${result.cost_usd:.4f}")
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        _rs_update(status="error", error=str(e), message=str(e)[:300])
+        _rs_log(f"ERROR: {e}")
+
+
+@app.route("/restyle_status")
+def restyle_status():
+    with _restyle_lock:
+        return jsonify(dict(_restyle_state))
+
+
+@app.route("/restyle_download")
+def restyle_download():
+    with _restyle_lock:
+        path = _restyle_state.get("output_path")
+    if not path or not Path(path).exists():
+        return "No output available yet", 404
+    return send_file(path, as_attachment=True)
+
+
+# ---------------------------------------------------------------------------
+# Revision routes
+# ---------------------------------------------------------------------------
+
+_revise_state: dict = {
+    "status": "idle",  # idle, parsing, auditing, revising, stitching, done, error
+    "message": "",
+    "progress": 0,
+    "log": [],
+    "project_dir": None,
+    "revised_path": None,
+    "audit_summary_path": None,
+    "original_words": 0,
+    "revised_words": 0,
+    "sections_total": 0,
+    "sections_done": 0,
+    "error": None,
+}
+_revise_lock = threading.Lock()
+
+
+def _rv_update(**kwargs):
+    with _revise_lock:
+        _revise_state.update(kwargs)
+
+
+def _rv_log(msg: str):
+    with _revise_lock:
+        _revise_state["log"].append(
+            f"[{datetime.now().strftime('%H:%M:%S')}] {msg}"
+        )
+        if len(_revise_state["log"]) > 200:
+            _revise_state["log"] = _revise_state["log"][-200:]
+
+
+@app.route("/revise")
+def revise_view():
+    """Landing page: upload a draft for revision."""
+    with _revise_lock:
+        state = dict(_revise_state)
+    return render_template("revise.html", active_nav="revise", revise_state=state)
+
+
+@app.route("/revise_start", methods=["POST"])
+def revise_start():
+    """Accept uploaded source + output folder, kick off the revision pipeline."""
+    login = _require_login_json()
+    if login:
+        return login
+
+    if _revise_state["status"] not in ("idle", "done", "error"):
+        flash("A revision is already in progress.", "error")
+        return redirect(url_for("revise_view"))
+
+    source_file = request.files.get("source")
+    if not source_file or not source_file.filename:
+        flash("Please select a document to revise.", "error")
+        return redirect(url_for("revise_view"))
+
+    output_folder = request.form.get("output_folder", "").strip()
+    if not output_folder:
+        flash("Please specify an output folder.", "error")
+        return redirect(url_for("revise_view"))
+
+    project_root = Path(output_folder).resolve()
+    project_root.mkdir(parents=True, exist_ok=True)
+    project = Project(project_root)
+    project.ensure_dirs()
+
+    # Save uploaded source into the project
+    from scribe.revision import save_source_upload
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="scribe_revise_"))
+    tmp_path = tmp_dir / source_file.filename
+    source_file.save(str(tmp_path))
+    stored = save_source_upload(project, tmp_path, source_file.filename)
+    tmp_path.unlink(missing_ok=True)
+    tmp_dir.rmdir()
+
+    # Also copy an optional custom style guide if provided
+    style_file = request.files.get("style_guide")
+    if style_file and style_file.filename:
+        ext = Path(style_file.filename).suffix.lower() or ".md"
+        style_dest = project.root / f"style{ext}"
+        style_file.save(str(style_dest))
+
+    _rv_update(
+        status="parsing",
+        message="Starting revision...",
+        progress=0,
+        log=[],
+        project_dir=str(project.root),
+        revised_path=None,
+        audit_summary_path=None,
+        original_words=0,
+        revised_words=0,
+        sections_total=0,
+        sections_done=0,
+        error=None,
+    )
+    _rv_log(f"Uploaded source: {source_file.filename} -> {stored.name}")
+    scribe_recent.record_project(project.root, config=project.config())
+
+    thread = threading.Thread(
+        target=_run_revise_thread,
+        args=(str(project.root),),
+        daemon=True,
+    )
+    thread.start()
+
+    return redirect(url_for("revise_view"))
+
+
+def _run_revise_thread(project_dir: str):
+    """Execute the revision pipeline in a background thread."""
+    try:
+        from scribe.parsers.sections import split_into_sections
+        from scribe.project import _read_document
+        from scribe.revision import (
+            RevisionInputError,
+            load_source_document,
+            run_revision_pipeline,
+        )
+        from scribe.stages.auditor import run_auditor
+        from scribe.stages.reviser import (
+            assemble_revised_document,
+            run_reviser,
+        )
+        from scribe.stages.revision_stitcher import run_revision_stitcher
+
+        project = Project(Path(project_dir))
+        config = project.config()
+
+        # Stage 1: parse
+        _rv_update(status="parsing", message="Parsing source document...", progress=5)
+        try:
+            document_text, sections = load_source_document(project)
+        except RevisionInputError as e:
+            _rv_update(status="error", message=str(e), error=str(e), progress=0)
+            _rv_log(f"ERROR: {e}")
+            return
+
+        _rv_update(
+            original_words=sum(s.word_count for s in sections),
+            sections_total=len(sections),
+        )
+        _rv_log(f"Parsed: {len(sections)} sections, {sum(s.word_count for s in sections):,} words")
+
+        # Stage 2: audit
+        _rv_update(status="auditing", message="Auditing against academic rules (Opus)...",
+                   progress=15)
+        _rv_log("Stage 2/4: Running auditor...")
+
+        async def _audit_cb(cid, event_type, data):
+            if event_type == "tool_use":
+                name = data.get("name", "")
+                _rv_log(f"  auditor: {name}")
+
+        audit = asyncio.run(run_auditor(
+            project, config, sections, document_text,
+            stream_callback=_audit_cb,
+        ))
+        _rv_log(
+            f"Audit: {len(audit.sections)} sections graded, "
+            f"{len(audit.overall_issues)} document-level issues"
+        )
+        if audit.overall_verdict:
+            _rv_log(f"Verdict: {audit.overall_verdict[:200]}")
+
+        _rv_update(
+            progress=30,
+            audit_summary_path=str(project.audit_summary_path),
+        )
+
+        # Build overall context (section outline)
+        from scribe.revision import _build_overall_context
+        overall_context = _build_overall_context(sections)
+
+        # Stage 3: revise
+        _rv_update(status="revising", message=f"Revising {len(sections)} sections (Sonnet, parallel)...",
+                   progress=35)
+        _rv_log(f"Stage 3/4: Revising sections (parallelism={config.parallelism})...")
+
+        async def _revise_cb(cid, event_type, data):
+            if event_type == "result" and not data.get("is_error"):
+                with _revise_lock:
+                    _revise_state["sections_done"] += 1
+                    done = _revise_state["sections_done"]
+                    total = _revise_state["sections_total"] or 1
+                    _revise_state["progress"] = 35 + int(45 * done / total)
+                _rv_log(f"  revised: {cid}")
+
+        results = asyncio.run(run_reviser(
+            project=project,
+            config=config,
+            audit=audit,
+            sections=sections,
+            overall_context=overall_context,
+            stream_callback=_revise_cb,
+        ))
+        failed = sum(1 for r in results if r.is_error)
+        _rv_log(f"Revision done: {len(results) - failed}/{len(results)} sections revised"
+                + (f" ({failed} failed, originals kept)" if failed else ""))
+
+        # Stage 4: stitch
+        _rv_update(status="stitching", message="Smoothing transitions (Opus)...",
+                   progress=82)
+        _rv_log("Stage 4/4: Smoothing transitions...")
+
+        assembled = assemble_revised_document(results)
+        revised_path = asyncio.run(run_revision_stitcher(
+            project, config, assembled,
+        ))
+
+        revised_words = len(revised_path.read_text(encoding="utf-8").split())
+        _rv_update(
+            status="done",
+            message=f"Done! {revised_words:,} words",
+            progress=100,
+            revised_path=str(revised_path),
+            revised_words=revised_words,
+        )
+        _rv_log(f"Revised document: {revised_words:,} words at {revised_path}")
+
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        logger = __import__("logging").getLogger(__name__)
+        logger.exception("Revision pipeline failed")
+        _rv_update(status="error", message=str(e)[:300], error=tb[-1500:])
+        _rv_log(f"ERROR: {e}")
+
+
+@app.route("/revise_status")
+def revise_status():
+    with _revise_lock:
+        return jsonify(dict(_revise_state))
+
+
+@app.route("/revise_download")
+def revise_download():
+    with _revise_lock:
+        path = _revise_state.get("revised_path")
+    if not path or not Path(path).exists():
+        return "No output available yet", 404
+    return send_file(path, as_attachment=True)
+
+
+@app.route("/revise_download_audit")
+def revise_download_audit():
+    with _revise_lock:
+        path = _revise_state.get("audit_summary_path")
+    if not path or not Path(path).exists():
+        return "No audit available yet", 404
+    return send_file(path, as_attachment=True)
+
+
+# ---------------------------------------------------------------------------
+# Claude CLI auth routes
+# ---------------------------------------------------------------------------
+
+@app.route("/login")
+def login_view():
+    """Login page: shows CLI status, login button, and streaming output."""
+    status = scribe_auth.check_login(force=True)
+    return render_template("login.html", auth=status, active_nav="login")
+
+
+@app.route("/api/auth/status")
+def api_auth_status():
+    force = request.args.get("refresh") == "1"
+    return jsonify(scribe_auth.check_login(force=force))
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_auth_login():
+    return jsonify(scribe_auth.start_login())
+
+
+@app.route("/api/auth/login_poll")
+def api_auth_login_poll():
+    return jsonify(scribe_auth.poll_login())
+
+
+@app.route("/api/auth/cancel", methods=["POST"])
+def api_auth_cancel():
+    return jsonify(scribe_auth.cancel_login())
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def api_auth_logout():
+    return jsonify(scribe_auth.logout())
+
+
+# ---------------------------------------------------------------------------
+# Native OS picker routes (folder + file)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/pick_folder", methods=["POST"])
+def api_pick_folder():
+    data = request.get_json(silent=True) or {}
+    path = scribe_picker.pick_folder(
+        title=data.get("title") or "Choose a folder",
+        initial=data.get("initial"),
+    )
+    if path is None:
+        return jsonify({"cancelled": True})
+    return jsonify({"path": path})
+
+
+@app.route("/api/pick_file", methods=["POST"])
+def api_pick_file():
+    data = request.get_json(silent=True) or {}
+    filetypes = [tuple(t) for t in (data.get("filetypes") or [])]
+    path = scribe_picker.pick_file(
+        title=data.get("title") or "Choose a file",
+        initial=data.get("initial"),
+        filetypes=filetypes or None,
+    )
+    if path is None:
+        return jsonify({"cancelled": True})
+    return jsonify({"path": path})
+
+
+@app.route("/api/recent/remove", methods=["POST"])
+def api_recent_remove():
+    data = request.get_json(silent=True) or {}
+    path = data.get("path", "")
+    if path:
+        scribe_recent.remove(path)
+    return jsonify({"ok": True})
 
 
 def run_web(host: str = "127.0.0.1", port: int = 5000, debug: bool = False):

@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}Scribe -- Revise{% endblock %}
+
+{% block content %}
+
+<div class="card">
+    <h2>Revise an existing draft</h2>
+    <p class="hint" style="margin-bottom: 1rem;">
+        Upload a completed draft (1,500+ words, with headings and citations) and
+        Scribe will audit it against the academic writing rules, then revise it
+        section by section. All citations, numbers, data, figures, and claims
+        are preserved exactly. The structure and argument stay yours; only the
+        prose is improved.
+    </p>
+    <p class="hint" style="margin-bottom: 1rem;">
+        This is different from "New project": generation writes a document
+        from scratch using an outline. Revision edits an existing document
+        in place. If you have a completed draft, use this.
+    </p>
+</div>
+
+{% if revise_state.status in ['idle', 'done', 'error'] %}
+<form action="/revise_start" method="POST" enctype="multipart/form-data">
+
+    <div class="card">
+        <h2>Source document <span class="badge">Required</span></h2>
+        <div class="form-row">
+            <label for="source">Upload your existing draft</label>
+            <input type="file" id="source" name="source"
+                   accept=".md,.docx,.doc,.txt,.markdown" required>
+            <p class="hint">
+                Markdown, Word (.docx/.doc), or plain text. Should be a
+                substantive draft with headings and citations, not an outline.
+                Default scaffold outlines are rejected.
+            </p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Output folder</h2>
+        <div class="form-row">
+            <label for="output_folder">Where to put the revised document and audit</label>
+            <input type="text" id="output_folder" name="output_folder"
+                   placeholder="e.g. C:\Users\David\Documents\my_paper_revised" required>
+            <p class="hint">
+                A new folder will be created if it doesn't exist. Outputs:
+                <code>revised.md</code> and <code>.scribe/audit.md</code>.
+            </p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Style guide <span class="badge" style="background: var(--surface2); color: var(--text-dim);">Optional</span></h2>
+        <div class="form-row">
+            <label for="style_guide">Override the built-in academic style (optional)</label>
+            <input type="file" id="style_guide" name="style_guide"
+                   accept=".md,.txt,.markdown,.doc,.docx">
+            <p class="hint">
+                Leave blank to use the built-in academic style and unified
+                writing rules (Allwood, Williams, Pinker, Sword, Schimel, etc.).
+            </p>
+        </div>
+    </div>
+
+    <div class="actions">
+        <button type="submit" class="btn btn-primary">Start revision</button>
+    </div>
+
+</form>
+{% endif %}
+
+{% if revise_state.status not in ['idle'] %}
+<div class="card">
+    <h2>Revision progress
+        <span class="status-badge status-{{ revise_state.status }}">{{ revise_state.status }}</span>
+    </h2>
+
+    <div style="margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.25rem;">
+            <span id="status-msg">{{ revise_state.message }}</span>
+            <span id="status-pct">{{ revise_state.progress }}%</span>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill {% if revise_state.status == 'done' %}done{% endif %}"
+                 id="progress-fill"
+                 style="width: {{ revise_state.progress }}%"></div>
+        </div>
+        {% if revise_state.sections_total > 0 %}
+        <p class="hint" id="sections-info">
+            Sections: <span id="sections-done">{{ revise_state.sections_done }}</span> / {{ revise_state.sections_total }} revised
+        </p>
+        {% endif %}
+    </div>
+
+    <div class="log-box" id="log-box">
+        {% for line in revise_state.log %}
+        <p>{{ line }}</p>
+        {% endfor %}
+    </div>
+
+    {% if revise_state.status == 'error' and revise_state.error %}
+    <div class="flash flash-error" style="margin-top: 1rem; white-space: pre-wrap; font-family: monospace; font-size: 0.78rem;">{{ revise_state.error[:2000] }}</div>
+    {% endif %}
+
+    {% if revise_state.status == 'done' and revise_state.revised_path %}
+    <div class="flash flash-success" style="margin-top: 1rem;">
+        Revision complete: {{ "{:,}".format(revise_state.original_words) }} -> {{ "{:,}".format(revise_state.revised_words) }} words.
+    </div>
+    <div class="actions" style="margin-top: 1rem;">
+        <a href="/revise_download" class="btn btn-primary">Download revised.md</a>
+        <a href="/revise_download_audit" class="btn btn-secondary">Download audit</a>
+    </div>
+    <p class="hint" style="margin-top: 0.5rem;">
+        Files also saved at: <code>{{ revise_state.revised_path }}</code>
+    </p>
+    {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let polling = null;
+
+function startPolling() {
+    if (polling) return;
+    polling = setInterval(async () => {
+        try {
+            const resp = await fetch('/revise_status');
+            const data = await resp.json();
+
+            const msg = document.getElementById('status-msg');
+            if (msg) msg.textContent = data.message;
+            const pct = document.getElementById('status-pct');
+            if (pct) pct.textContent = data.progress + '%';
+            const fill = document.getElementById('progress-fill');
+            if (fill) fill.style.width = data.progress + '%';
+
+            const done = document.getElementById('sections-done');
+            if (done) done.textContent = data.sections_done;
+
+            const logBox = document.getElementById('log-box');
+            if (logBox && data.log) {
+                logBox.innerHTML = data.log.map(l => '<p>' + l.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</p>').join('');
+                logBox.scrollTop = logBox.scrollHeight;
+            }
+
+            if (fill && data.status === 'done') fill.classList.add('done');
+
+            if (['done','error','idle'].includes(data.status)) {
+                clearInterval(polling);
+                polling = null;
+                if (data.status === 'done' || data.status === 'error') {
+                    setTimeout(() => location.reload(), 1000);
+                }
+            }
+        } catch (e) {
+            console.error('Poll failed:', e);
+        }
+    }, 2000);
+}
+
+const currentStatus = '{{ revise_state.status }}';
+if (['parsing','auditing','revising','stitching'].includes(currentStatus)) {
+    startPolling();
+}
+</script>
+{% endblock %}

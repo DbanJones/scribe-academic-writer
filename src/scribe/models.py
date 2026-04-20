@@ -133,6 +133,68 @@ class DocumentReview(BaseModel):
         return "\n".join(lines)
 
 
+# --- Revision audit ---
+
+
+class AuditIssue(BaseModel):
+    """A single issue flagged during document audit."""
+    category: str   # nominalisation, weasel_word, clutter, citation_handling,
+                    # structure, hedging, passive_voice, formality, precision,
+                    # old_to_new_flow, parallel_structure, metadiscourse
+    severity: str = "medium"   # high, medium, low
+    location: str = ""         # e.g. "Section 2, para 3" or "Overall"
+    original: str = ""         # the offending text (quoted, short)
+    issue: str                 # short description of what's wrong
+    suggestion: str = ""       # how to fix (brief)
+
+
+class SectionAudit(BaseModel):
+    """Audit of a single document section."""
+    section_id: str
+    section_title: str
+    word_count: int = 0
+    structural_role: str = ""  # e.g. "Context", "Literature", "Discussion"
+    issues: list[AuditIssue] = Field(default_factory=list)
+    strengths: list[str] = Field(default_factory=list)
+    revision_priority: str = "medium"  # high, medium, low
+
+
+class DocumentAudit(BaseModel):
+    """Structured audit of an entire document against academic writing rules."""
+    title: str = ""
+    total_words: int = 0
+    section_count: int = 0
+    overall_issues: list[AuditIssue] = Field(default_factory=list)
+    overall_strengths: list[str] = Field(default_factory=list)
+    sections: list[SectionAudit] = Field(default_factory=list)
+    hourglass_assessment: str = ""
+    six_elements_present: dict[str, str] = Field(default_factory=dict)
+    # e.g. {"Context": "strong", "Literature": "present but weak", "Proposal": "missing", ...}
+    overall_verdict: str = ""
+
+    def save(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            self.model_dump_json(indent=2),
+            encoding="utf-8",
+        )
+
+    @classmethod
+    def load(cls, path: Path) -> DocumentAudit:
+        return cls.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+class SectionRevision(BaseModel):
+    """Result of revising a single section."""
+    section_id: str
+    section_title: str
+    original_words: int = 0
+    revised_words: int = 0
+    revised_text: str = ""
+    changes_summary: list[str] = Field(default_factory=list)
+    preserved_citations: list[str] = Field(default_factory=list)
+
+
 # --- Run state ---
 
 

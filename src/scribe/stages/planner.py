@@ -10,7 +10,7 @@ from typing import Any
 
 from scribe.config import ScribeConfig
 from scribe.models import Plan
-from scribe.parsers.refs import extract_all_refs, extract_ref_to_cache
+from scribe.parsers.refs import extract_all_refs
 from scribe.project import Project
 from scribe.sdk import SDKResponse, StreamCallback, invoke
 from scribe.stages.prompts import planner_prompt
@@ -35,14 +35,35 @@ async def run_planner(
     5. Parse JSON response into Plan model.
     6. Save plan.json and plan_review.md.
     """
-    # Load inputs
+    # Load inputs. extract_all_refs writes the per-ref cache that executor
+    # uses, so we skip the old duplicate extract_ref_to_cache loop.
     outline_text = project.load_outline()
-    style_text = project.load_style()
-    ref_texts = extract_all_refs(project.refs_dir)
 
-    # Pre-extract refs to cache so executor can read them via SDK tools
-    for ref_path in project.list_refs():
-        extract_ref_to_cache(ref_path, project.extracted_dir)
+    # Fail loud on the default scaffold. Running generation on an empty
+    # placeholder produces a meta-document about writing, not a real paper.
+    # See src/scribe/parsers/sections.py::is_default_scaffold.
+    from scribe.parsers.sections import (
+        is_default_scaffold,
+        looks_like_substantive_draft,
+    )
+    if is_default_scaffold(outline_text):
+        raise ValueError(
+            "outline.md is still the default scaffold shipped by `scribe init`. "
+            "Replace it with a real outline before running the generation pipeline. "
+            "If you want to revise an existing draft rather than generate from an "
+            "outline, use `scribe revise` instead."
+        )
+    if looks_like_substantive_draft(outline_text):
+        logger.warning(
+            "outline.md looks like a substantive draft (%d words, with citations). "
+            "You may have meant `scribe revise` rather than `scribe run`. "
+            "Continuing with generation anyway.",
+            len(outline_text.split()),
+        )
+
+    style_text = project.load_style()
+    project.ensure_dirs()
+    ref_texts = extract_all_refs(project.refs_dir, cache_dir=project.extracted_dir)
 
     # Build prompt
     system, user = planner_prompt(

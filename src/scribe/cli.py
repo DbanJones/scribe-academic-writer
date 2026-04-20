@@ -171,24 +171,27 @@ def run(
     if changes and not force:
         console.print(f"[dim]Changed inputs: {', '.join(changes)}[/dim]")
 
-    # --- DOCUMENT REVIEW (thesis analysis) ---
+    # --- DOCUMENT REVIEW (Opus) ---
     console.print(f"[bold]Stage 1/5: Document Review ({config.project_name})[/bold]")
     console.print(f"  Analysing thesis structure, themes, and argument...\n")
 
-    doc_review = asyncio.run(run_reviewer(project, config))
+    async def _review_and_plan() -> tuple[DocumentReview, Plan]:
+        doc_review = await run_reviewer(project, config)
+        review_ctx = doc_review.as_prompt_context()
+        console.print(f"[green]Review complete:[/green]")
+        console.print(f"  Key question: {doc_review.key_question}")
+        console.print(f"  Themes: {', '.join(doc_review.key_themes)}")
+        console.print(f"  Sections mapped: {len(doc_review.section_mappings)}\n")
+
+        console.print(f"[bold]Stage 2/5: Planning[/bold]")
+        console.print(f"  Outline: {project.outline_path}")
+        console.print(f"  Refs: {len(project.list_refs())} files\n")
+
+        the_plan = await run_planner(project, config, review_context=review_ctx)
+        return doc_review, the_plan
+
+    doc_review, the_plan = asyncio.run(_review_and_plan())
     review_context = doc_review.as_prompt_context()
-
-    console.print(f"[green]Review complete:[/green]")
-    console.print(f"  Key question: {doc_review.key_question}")
-    console.print(f"  Themes: {', '.join(doc_review.key_themes)}")
-    console.print(f"  Sections mapped: {len(doc_review.section_mappings)}\n")
-
-    # --- PLAN ---
-    console.print(f"[bold]Stage 2/5: Planning[/bold]")
-    console.print(f"  Outline: {project.outline_path}")
-    console.print(f"  Refs: {len(project.list_refs())} files\n")
-
-    the_plan = asyncio.run(run_planner(project, config, review_context=review_context))
 
     console.print(
         f"[green]Plan: {the_plan.estimated_chunks} chunks, "
@@ -203,7 +206,7 @@ def run(
         console.print("[yellow]Dry run: stopping after plan.[/yellow]")
         return
 
-    # --- REVIEW ---
+    # --- REVIEW (interactive TUI, inherently sync) ---
     if not no_review:
         console.print("[bold]Stage 3/5: Review[/bold]\n")
         tui = ReviewTUI(the_plan, project)
@@ -215,7 +218,7 @@ def run(
     else:
         the_plan.save(project.plan_path)
 
-    # Build section mappings from review for per-chunk role context
+    # Build section mappings for per-chunk role context
     section_mappings = {}
     for m in doc_review.section_mappings:
         section_mappings[m.section] = {
@@ -223,14 +226,14 @@ def run(
             "answers_question_by": m.answers_question_by,
         }
 
-    # --- WRITE ---
+    # --- WRITE + STITCH in a single event loop ---
     console.print(f"\n[bold]Stage 4/5: Writing {len(the_plan.chunks)} chunks[/bold]\n")
     exec_tui = ExecutionTUI(the_plan, verbose=verbose)
 
-    async def _write() -> list[Path]:
+    async def _write_and_stitch() -> tuple[list[Path], Path]:
         exec_tui.start()
         try:
-            return await run_executor(
+            drafts = await run_executor(
                 project,
                 the_plan,
                 config,
@@ -241,19 +244,18 @@ def run(
             )
         finally:
             exec_tui.stop()
+        console.print(f"\n[green]{len(drafts)} drafts written.[/green]\n")
 
-    drafts = asyncio.run(_write())
-    console.print(f"\n[green]{len(drafts)} drafts written.[/green]\n")
+        if config.git.auto_commit:
+            git_repo.commit_stage("draft", config.project_name, config.git.commit_template)
 
-    # Git commit after write
-    if config.git.auto_commit:
-        git_repo.commit_stage("draft", config.project_name, config.git.commit_template)
+        console.print("[bold]Stage 5/5: Stitching[/bold]\n")
+        final = await run_stitcher(
+            project, the_plan, config, review_context=review_context
+        )
+        return drafts, final
 
-    # --- STITCH ---
-    console.print("[bold]Stage 5/5: Stitching[/bold]\n")
-    final_path = asyncio.run(
-        run_stitcher(project, the_plan, config, review_context=review_context)
-    )
+    drafts, final_path = asyncio.run(_write_and_stitch())
 
     word_count = len(final_path.read_text(encoding="utf-8").split())
     pipeline_duration = time.time() - pipeline_start
@@ -545,6 +547,190 @@ def web(
     console.print(f"[bold]Starting Scribe web UI at http://{host}:{port}[/bold]")
     console.print("  Press Ctrl+C to stop.\n")
     run_web(host=host, port=port, debug=False)
+
+
+@app.command("list-styles")
+def list_styles_cmd() -> None:
+    """List available citation styles (parents, journals, custom presets)."""
+    from scribe.citations import list_styles
+
+    styles = list_styles()
+    console.print("[bold]Parent styles[/bold]")
+    for s in styles.get("parents", []):
+        console.print(f"  {s}")
+    console.print("\n[bold]Journal styles[/bold]")
+    for s in styles.get("journals", []):
+        console.print(f"  {s}")
+    if styles.get("custom"):
+        console.print("\n[bold]Custom presets[/bold]")
+        for s in styles["custom"]:
+            console.print(f"  {s}")
+
+
+@app.command()
+def restyle(
+    input_file: Path = typer.Argument(..., help="Input .md or .docx file"),
+    style: str = typer.Option(..., "--style", "-s", help="Target style id (e.g. apa, ieee, nature)"),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Output path (default: <input>.restyled-<style>.<ext>)"),
+    rules: str = typer.Option("", "--rules", "-r", help="Free-text additional style rules"),
+    model: str = typer.Option("opus", "--model", "-m", help="Claude model: opus, sonnet, haiku"),
+    no_polish: bool = typer.Option(False, "--no-polish", help="Skip the final formatting polish pass"),
+) -> None:
+    """Restyle a document's citations and formatting to match a target style."""
+    from scribe.citations import load_style
+    from scribe.citations.restyler import restyle_document
+    from scribe.config import ScribeConfig
+
+    try:
+        resolved = load_style(style)
+    except FileNotFoundError:
+        console.print(f"[red]Unknown style: {style}[/red]")
+        console.print("Run [bold]scribe list-styles[/bold] to see available styles.")
+        raise typer.Exit(1)
+
+    model_id = ScribeConfig().resolve_model(model)
+    console.print(f"[bold]Restyling {input_file.name} -> {resolved['styleName']}[/bold]")
+    console.print(f"  Model: {model_id}")
+    if rules:
+        console.print(f"  Extra rules: {rules[:80]}{'...' if len(rules) > 80 else ''}")
+
+    async def _progress(event: str, payload: dict) -> None:
+        console.print(f"  [dim]{event}[/dim] {payload}")
+
+    result = asyncio.run(
+        restyle_document(
+            input_file,
+            style_id=style,
+            output_path=output,
+            extra_rules=rules,
+            model=model_id,
+            skip_polish=no_polish,
+            progress=_progress,
+        )
+    )
+
+    console.print(
+        f"\n[green]Done: {result.in_text_count} citations, "
+        f"{result.bibliography_count} references[/green]"
+    )
+    console.print(f"  Output: {result.output_path}")
+    console.print(f"  Duration: {_fmt_duration(result.duration_s)}")
+    if result.cost_usd > 0:
+        console.print(f"  Cost: ${result.cost_usd:.4f}")
+
+
+@app.command()
+def revise(
+    source: Path = typer.Argument(
+        ...,
+        help="Path to the existing draft (.md, .docx, .doc, .txt).",
+    ),
+    output_dir: Path | None = typer.Option(
+        None, "--output-dir",
+        help="Project folder to create/use (defaults to a .scribe-revise folder next to the source).",
+    ),
+    audit_only: bool = typer.Option(
+        False, "--audit-only",
+        help="Run the audit stage only; do not revise or stitch.",
+    ),
+) -> None:
+    """Revise an existing substantive draft against the academic writing rules.
+
+    Unlike `scribe run`, which generates a document from an outline, this
+    command takes a finished draft and revises it section by section while
+    preserving all citations, data, claims, and argument structure.
+    """
+    from scribe.project import Project
+    from scribe.revision import (
+        RevisionInputError,
+        load_source_document,
+        run_revision_pipeline,
+        save_source_upload,
+    )
+    from scribe.stages.auditor import run_auditor
+
+    source = source.resolve()
+    if not source.exists():
+        console.print(f"[red]Source not found: {source}[/red]")
+        raise typer.Exit(1)
+
+    # Create or reuse a project alongside the source
+    project_root = output_dir.resolve() if output_dir else (
+        source.parent / f"{source.stem}_revised"
+    )
+    project_root.mkdir(parents=True, exist_ok=True)
+    project = Project(project_root)
+    project.ensure_dirs()
+
+    # Copy source into the project under the canonical name
+    stored_path = save_source_upload(project, source, source.name)
+    console.print(f"[bold]Revising: {source.name}[/bold]")
+    console.print(f"  Project: {project.root}")
+
+    config = project.config()
+
+    try:
+        if audit_only:
+            # Shortcut: just run the auditor and print its summary
+            document_text, sections = load_source_document(project)
+            console.print(f"  Sections: {len(sections)}, "
+                          f"Words: {sum(s.word_count for s in sections):,}\n")
+            console.print("[cyan]Running auditor (Opus)...[/cyan]")
+
+            audit = asyncio.run(
+                run_auditor(project, config, sections, document_text)
+            )
+            console.print(
+                f"\n[green]Audit complete[/green]: {len(audit.sections)} sections, "
+                f"{len(audit.overall_issues)} document-level issues.\n"
+            )
+            console.print(f"  Audit JSON: {project.audit_path}")
+            console.print(f"  Audit summary: {project.audit_summary_path}")
+            if audit.overall_verdict:
+                console.print(f"\n  [bold]Verdict:[/bold] {audit.overall_verdict}")
+            return
+
+        console.print(f"  Config: parallelism={config.parallelism}, "
+                      f"reviewer={config.reviewer_model_id}, "
+                      f"reviser={config.executor_model_id}\n")
+        console.print("[cyan]Running revision pipeline "
+                      "(parse -> audit -> revise -> smooth)...[/cyan]\n")
+
+        summary = asyncio.run(run_revision_pipeline(project, config))
+
+        console.print(
+            f"[green]Revision complete in {_fmt_duration(summary['duration_s'])}[/green]"
+        )
+        console.print(
+            f"  Words: {summary['original_words']:,} -> {summary['revised_words']:,}"
+        )
+        console.print(
+            f"  Sections revised: {summary['sections_revised']}/{summary['sections_total']}"
+        )
+        if summary['sections_failed']:
+            console.print(
+                f"  [yellow]Failed sections: {summary['sections_failed']} "
+                f"(originals kept)[/yellow]"
+            )
+        console.print(f"\n  Revised:       {summary['revised_path']}")
+        console.print(f"  Audit (JSON):  {summary['audit_path']}")
+        console.print(f"  Audit (MD):    {summary['audit_summary_path']}")
+        if summary['audit_verdict']:
+            console.print(f"\n  [bold]Audit verdict:[/bold] {summary['audit_verdict']}")
+
+    except RevisionInputError as e:
+        console.print(f"[red]Cannot revise: {e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:  # noqa: BLE001 -- show a readable message, not a wall of traceback
+        console.print(f"[red]Revision pipeline crashed:[/red] {type(e).__name__}: {e}")
+        console.print(
+            f"[yellow]Per-section revisions under {project.revisions_dir} are preserved.[/yellow]"
+        )
+        console.print(
+            "Run with --audit-only to produce an audit without revision, or retry; "
+            "if the audit exists, it will be reused and only the revise + smooth stages re-run."
+        )
+        raise typer.Exit(1)
 
 
 def _fmt_duration(seconds: float) -> str:

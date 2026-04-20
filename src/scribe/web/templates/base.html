@@ -4,361 +4,40 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Scribe{% endblock %}</title>
-    <style>
-        :root {
-            --bg: #0f1117;
-            --surface: #1a1d27;
-            --surface2: #242836;
-            --border: #2e3348;
-            --text: #e4e6f0;
-            --text-dim: #8b8fa3;
-            --accent: #6c8cff;
-            --accent-hover: #8ba3ff;
-            --success: #4ade80;
-            --warning: #fbbf24;
-            --error: #f87171;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        body {
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            line-height: 1.6;
-            min-height: 100vh;
-        }
-
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-
-        header {
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 1.5rem;
-            margin-bottom: 2rem;
-        }
-
-        header h1 {
-            font-size: 1.75rem;
-            font-weight: 600;
-            letter-spacing: -0.02em;
-        }
-
-        header h1 span {
-            color: var(--accent);
-        }
-
-        header p {
-            color: var(--text-dim);
-            font-size: 0.9rem;
-            margin-top: 0.25rem;
-        }
-
-        .card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .card h2 {
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            color: var(--text);
-        }
-
-        .card h2 .badge {
-            display: inline-block;
-            font-size: 0.7rem;
-            padding: 0.15rem 0.5rem;
-            border-radius: 999px;
-            background: var(--accent);
-            color: white;
-            font-weight: 500;
-            margin-left: 0.5rem;
-            vertical-align: middle;
-        }
-
-        label {
-            display: block;
-            font-size: 0.85rem;
-            font-weight: 500;
-            color: var(--text-dim);
-            margin-bottom: 0.35rem;
-        }
-
-        input[type="text"],
-        input[type="number"],
-        select,
-        textarea {
-            width: 100%;
-            padding: 0.6rem 0.8rem;
-            background: var(--surface2);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            color: var(--text);
-            font-size: 0.9rem;
-            font-family: inherit;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        input:focus, select:focus, textarea:focus {
-            border-color: var(--accent);
-        }
-
-        input[type="file"] {
-            width: 100%;
-            padding: 0.6rem;
-            background: var(--surface2);
-            border: 2px dashed var(--border);
-            border-radius: 8px;
-            color: var(--text-dim);
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: border-color 0.2s;
-        }
-
-        input[type="file"]:hover {
-            border-color: var(--accent);
-        }
-
-        .form-row {
-            margin-bottom: 1rem;
-        }
-
-        .form-row-inline {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
-
-        .radio-group {
-            display: flex;
-            gap: 1.5rem;
-            margin-bottom: 0.75rem;
-        }
-
-        .radio-group label {
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
-            cursor: pointer;
-            color: var(--text);
-        }
-
-        .radio-group input[type="radio"] {
-            width: auto;
-            accent-color: var(--accent);
-        }
-
-        .checkbox-label {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            cursor: pointer;
-            color: var(--text);
-            font-size: 0.9rem;
-        }
-
-        .checkbox-label input[type="checkbox"] {
-            width: auto;
-            accent-color: var(--accent);
-        }
-
-        .hint {
-            font-size: 0.78rem;
-            color: var(--text-dim);
-            margin-top: 0.25rem;
-        }
-
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-            padding: 0.65rem 1.4rem;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            font-weight: 500;
-            font-family: inherit;
-            cursor: pointer;
-            border: none;
-            transition: all 0.2s;
-            text-decoration: none;
-        }
-
-        .btn-primary {
-            background: var(--accent);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: var(--accent-hover);
-        }
-
-        .btn-secondary {
-            background: var(--surface2);
-            color: var(--text);
-            border: 1px solid var(--border);
-        }
-
-        .btn-secondary:hover {
-            background: var(--border);
-        }
-
-        .btn-success {
-            background: var(--success);
-            color: #000;
-        }
-
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .flash {
-            padding: 0.75rem 1rem;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-            font-size: 0.9rem;
-        }
-
-        .flash-success {
-            background: rgba(74, 222, 128, 0.1);
-            border: 1px solid rgba(74, 222, 128, 0.3);
-            color: var(--success);
-        }
-
-        .flash-error {
-            background: rgba(248, 113, 113, 0.1);
-            border: 1px solid rgba(248, 113, 113, 0.3);
-            color: var(--error);
-        }
-
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: var(--surface2);
-            border-radius: 4px;
-            overflow: hidden;
-            margin: 0.75rem 0;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: var(--accent);
-            border-radius: 4px;
-            transition: width 0.5s ease;
-        }
-
-        .progress-fill.done {
-            background: var(--success);
-        }
-
-        .status-badge {
-            display: inline-block;
-            padding: 0.2rem 0.6rem;
-            border-radius: 999px;
-            font-size: 0.75rem;
-            font-weight: 500;
-        }
-
-        .status-idle { background: var(--surface2); color: var(--text-dim); }
-        .status-planning, .status-writing, .status-stitching { background: rgba(108, 140, 255, 0.15); color: var(--accent); }
-        .status-done { background: rgba(74, 222, 128, 0.15); color: var(--success); }
-        .status-error { background: rgba(248, 113, 113, 0.15); color: var(--error); }
-
-        .log-box {
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 0.75rem;
-            max-height: 250px;
-            overflow-y: auto;
-            font-family: 'Cascadia Code', 'Consolas', monospace;
-            font-size: 0.78rem;
-            line-height: 1.5;
-            color: var(--text-dim);
-        }
-
-        .log-box p { margin: 0; }
-
-        .stat-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 1rem;
-        }
-
-        .stat-card {
-            background: var(--surface2);
-            border-radius: 8px;
-            padding: 1rem;
-            text-align: center;
-        }
-
-        .stat-card .value {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--accent);
-        }
-
-        .stat-card .label {
-            font-size: 0.8rem;
-            color: var(--text-dim);
-            margin-top: 0.25rem;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th, td {
-            text-align: left;
-            padding: 0.5rem 0.75rem;
-            border-bottom: 1px solid var(--border);
-            font-size: 0.85rem;
-        }
-
-        th {
-            color: var(--text-dim);
-            font-weight: 500;
-            font-size: 0.78rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .tag {
-            display: inline-block;
-            padding: 0.1rem 0.4rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            background: var(--surface2);
-            color: var(--text-dim);
-        }
-
-        a { color: var(--accent); text-decoration: none; }
-        a:hover { color: var(--accent-hover); }
-
-        .actions {
-            display: flex;
-            gap: 0.75rem;
-            margin-top: 1.5rem;
-        }
-    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Source+Serif+Pro:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     {% block extra_head %}{% endblock %}
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1><span>Scribe</span> -- Academic Writer</h1>
-            <p>Chunked long-form writing powered by Claude</p>
+    <div class="container {% block container_class %}{% endblock %}">
+        <header class="masthead">
+            <a class="brand" href="/">
+                <span class="mark">S</span>
+                <div>
+                    <h1>Scribe</h1>
+                    <div class="tagline">Academic writing, restyling, and citation engine</div>
+                </div>
+            </a>
+            <nav class="primary-nav">
+                <a href="/" class="{% if active_nav == 'dashboard' %}active{% endif %}">Dashboard</a>
+                <a href="/new" class="{% if active_nav == 'new' %}active{% endif %}">New project</a>
+                <a href="/revise" class="{% if active_nav == 'revise' %}active{% endif %}">Revise</a>
+                <a href="/restyle" class="{% if active_nav == 'restyle' %}active{% endif %}">Restyle</a>
+                {% if auth_status %}
+                <a href="/login" class="auth-chip {% if active_nav == 'login' %}active{% endif %}"
+                   title="{{ auth_status.cli_path or 'Claude CLI not found' }}">
+                    {% if auth_status.logged_in %}
+                        <span class="auth-dot auth-dot-ok"></span> Connected
+                    {% elif auth_status.installed %}
+                        <span class="auth-dot auth-dot-warn"></span> Login required
+                    {% else %}
+                        <span class="auth-dot auth-dot-err"></span> Install CLI
+                    {% endif %}
+                </a>
+                {% endif %}
+            </nav>
         </header>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
