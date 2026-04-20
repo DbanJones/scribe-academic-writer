@@ -457,6 +457,36 @@ def get_status():
         return jsonify(dict(_run_state))
 
 
+@app.route("/project_download_final")
+def project_download_final():
+    """Download final.md for a project (Write mode)."""
+    project_dir = request.args.get("project_dir", "")
+    if not project_dir:
+        return "project_dir required", 400
+    project = Project(Path(project_dir))
+    if not project.final_path.exists():
+        return "No final document yet", 404
+    return send_file(str(project.final_path), as_attachment=True)
+
+
+@app.route("/project_download_final_docx")
+def project_download_final_docx():
+    """Download final.docx for a project (Write mode). Exports on demand."""
+    project_dir = request.args.get("project_dir", "")
+    if not project_dir:
+        return "project_dir required", 400
+    project = Project(Path(project_dir))
+    if not project.final_path.exists():
+        return "No final document yet", 404
+    docx_path = project.final_path.with_suffix(".docx")
+    if not docx_path.exists():
+        from scribe.export import try_export_sibling
+        try_export_sibling(project.final_path)
+    if not docx_path.exists():
+        return "Word export failed", 500
+    return send_file(str(docx_path), as_attachment=True)
+
+
 @app.route("/upload_refs", methods=["POST"])
 def upload_refs():
     """Upload additional reference files to an existing project."""
@@ -1009,6 +1039,22 @@ def revise_download():
     return send_file(path, as_attachment=True)
 
 
+@app.route("/revise_download_docx")
+def revise_download_docx():
+    with _revise_lock:
+        md_path = _revise_state.get("revised_path")
+    if not md_path:
+        return "No output available yet", 404
+    docx_path = Path(md_path).with_suffix(".docx")
+    if not docx_path.exists():
+        # Export on demand if the pipeline somehow skipped it
+        from scribe.export import try_export_sibling
+        try_export_sibling(Path(md_path))
+    if not docx_path.exists():
+        return "Word export failed; markdown is available via /revise_download", 500
+    return send_file(str(docx_path), as_attachment=True)
+
+
 @app.route("/revise_download_audit")
 def revise_download_audit():
     with _revise_lock:
@@ -1265,6 +1311,21 @@ def expand_download():
     if not path or not Path(path).exists():
         return "No output available yet", 404
     return send_file(path, as_attachment=True)
+
+
+@app.route("/expand_download_docx")
+def expand_download_docx():
+    with _expand_lock:
+        md_path = _expand_state.get("expanded_path")
+    if not md_path:
+        return "No output available yet", 404
+    docx_path = Path(md_path).with_suffix(".docx")
+    if not docx_path.exists():
+        from scribe.export import try_export_sibling
+        try_export_sibling(Path(md_path))
+    if not docx_path.exists():
+        return "Word export failed; markdown is available via /expand_download", 500
+    return send_file(str(docx_path), as_attachment=True)
 
 
 @app.route("/expand_download_plan")

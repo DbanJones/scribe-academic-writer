@@ -234,13 +234,14 @@ async def run_expansion_pipeline(
         if stitched_path.exists() and stitched_path != original_expanded:
             text = stitched_path.read_text(encoding="utf-8")
             original_expanded.write_text(text, encoding="utf-8")
-            # Remove revised.md if it was just created by the stitcher
-            # (only if it wasn't there before this call). Keep it simple:
-            # we always overwrite expanded.md with the stitcher output.
         final_path = original_expanded
     else:
         project.expanded_path.write_text(assembled, encoding="utf-8")
         final_path = project.expanded_path
+
+    # Auto-export a Word version alongside the markdown.
+    from scribe.export import try_export_sibling
+    try_export_sibling(final_path)
 
     duration = time.time() - pipeline_start
     expanded_words = len(final_path.read_text(encoding="utf-8").split())

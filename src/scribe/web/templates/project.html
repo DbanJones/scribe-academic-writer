@@ -3,57 +3,67 @@
 
 {% block content %}
 
-<!-- Project Header -->
-<div class="card">
-    <h2>{{ info.project_name }}</h2>
-    <p class="hint" style="margin-bottom: 1rem;">{{ info.root }}</p>
+<div class="flex-between">
+    <div>
+        <span class="eyebrow">Project</span>
+        <h2 class="page-title">{{ info.project_name }}</h2>
+        <p class="mono small muted" style="margin-top: 0.25rem;">{{ info.root }}</p>
+    </div>
+    <div class="flex">
+        <a href="/restyle?project_dir={{ info.root }}" class="btn btn-ghost btn-sm">Restyle final</a>
+        <a href="/" class="btn btn-ghost btn-sm">Dashboard</a>
+    </div>
+</div>
 
+<div class="card card-feature">
     <div class="stat-grid">
         <div class="stat-card">
             <div class="value">{{ info.ref_count }}</div>
             <div class="label">References</div>
         </div>
         <div class="stat-card">
-            <div class="value">{% if plan %}{{ plan.estimated_chunks }}{% else %}-{% endif %}</div>
+            <div class="value">{% if plan %}{{ plan.estimated_chunks }}{% else %}--{% endif %}</div>
             <div class="label">Chunks</div>
         </div>
         <div class="stat-card">
-            <div class="value">{% if plan %}{{ "{:,}".format(plan.estimated_words) }}{% else %}-{% endif %}</div>
-            <div class="label">Est. Words</div>
+            <div class="value">{% if plan %}{{ "{:,}".format(plan.estimated_words) }}{% else %}--{% endif %}</div>
+            <div class="label">Est. words</div>
         </div>
         <div class="stat-card">
-            <div class="value">{% if final_words %}{{ "{:,}".format(final_words) }}{% else %}-{% endif %}</div>
-            <div class="label">Final Words</div>
+            <div class="value">{% if final_words %}{{ "{:,}".format(final_words) }}{% else %}--{% endif %}</div>
+            <div class="label">Final words</div>
         </div>
     </div>
 </div>
 
-<!-- Run Controls -->
 <div class="card">
-    <h2>Run Pipeline
-        <span class="status-badge status-{{ run_state.status }}">{{ run_state.status }}</span>
-    </h2>
+    <div class="flex-between" style="margin-bottom: 0.75rem;">
+        <h2 style="margin: 0;">
+            Pipeline
+            <span class="status-badge status-{{ run_state.status }}">{{ run_state.status }}</span>
+        </h2>
+    </div>
 
     {% if run_state.status in ['idle', 'done', 'error'] %}
-    <form action="/run" method="POST" style="margin-bottom: 1rem;">
+    <form action="/run" method="POST">
         <input type="hidden" name="project_dir" value="{{ info.root }}">
-        <div class="form-row">
+        <div class="flex" style="flex-wrap: wrap; gap: 1rem;">
+            <button type="submit" class="btn btn-primary btn-cta" id="run-btn">
+                {% if info.final_exists %}Re-run pipeline{% else %}Run pipeline{% endif %}
+            </button>
             <label class="checkbox-label">
                 <input type="checkbox" name="skip_review" checked>
-                Skip review step (auto-approve plan)
+                Skip review step
             </label>
         </div>
-        <button type="submit" class="btn btn-primary" id="run-btn">
-            {% if info.final_exists %}Re-run Pipeline{% else %}Run Pipeline{% endif %}
-        </button>
     </form>
     {% endif %}
 
     {% if run_state.status not in ['idle'] %}
-    <div style="margin-bottom: 1rem;">
-        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.25rem;">
+    <div style="margin-top: 1rem;">
+        <div class="flex-between small">
             <span id="status-msg">{{ run_state.message }}</span>
-            <span id="status-pct">{{ run_state.progress }}%</span>
+            <span id="status-pct" class="mono muted">{{ run_state.progress }}%</span>
         </div>
         <div class="progress-bar">
             <div class="progress-fill {% if run_state.status == 'done' %}done{% endif %}"
@@ -67,107 +77,149 @@
         {% endif %}
     </div>
 
-    <!-- Log -->
-    <div class="log-box" id="log-box">
-        {% for line in run_state.log %}
-        <p>{{ line }}</p>
-        {% endfor %}
-    </div>
+    <details class="mt-2">
+        <summary>Live log</summary>
+        <div class="log-box" id="log-box">
+            {% for line in run_state.log %}<p>{{ line }}</p>{% endfor %}
+        </div>
+    </details>
     {% endif %}
 
-    {% if run_state.status == 'error' and run_state.error %}
-    <div class="flash flash-error" style="margin-top: 1rem;">
-        {{ run_state.error[:500] }}
+    {% if run_state.status == 'error' and run_state.error_kind == 'scaffold' %}
+    <div class="error-guide mt-2">
+        <div class="error-guide-icon">!</div>
+        <div>
+            <h3>You picked "Write a new paper", but the outline is still blank.</h3>
+            <p>
+                The outline file in this project is still the default scaffold
+                that <code>scribe init</code> creates
+                (<em>My Document / Introduction / Body / Conclusion</em>).
+                The generator expects a real outline with specific headings and
+                bullets for your topic &mdash; otherwise it will produce a
+                meta-document about writing, not a paper about your subject.
+            </p>
+            <p><strong>Two ways forward:</strong></p>
+            <ol>
+                <li>
+                    <strong>If you already have a finished draft</strong>
+                    (headings, prose, citations), you want
+                    <a href="/revise" class="btn btn-primary btn-sm">Revise &rarr;</a>
+                    instead. Revise audits and improves an existing document without
+                    rewriting it.
+                </li>
+                <li>
+                    <strong>If you genuinely want to generate from scratch</strong>,
+                    open the project folder, edit <code>outline.md</code> to list your
+                    actual sections and bullets, then click "Run Pipeline" again.
+                    Use tags like <code>[depth:deep]</code> and <code>[ref:path]</code>
+                    to control what happens per bullet.
+                </li>
+            </ol>
+        </div>
     </div>
+    {% elif run_state.status == 'error' and run_state.error_kind == 'missing_outline' %}
+    <div class="error-guide mt-2">
+        <div class="error-guide-icon">!</div>
+        <div>
+            <h3>No outline found in this project.</h3>
+            <p>
+                Upload an <code>outline.md</code> (or <code>.docx</code>) to the
+                project folder, or create a new project from the
+                <a href="/new">New project</a> page.
+            </p>
+        </div>
+    </div>
+    {% elif run_state.status == 'error' and run_state.error %}
+    <div class="flash flash-error mt-2">{{ run_state.error[:500] }}</div>
     {% endif %}
 
     {% if run_state.status == 'done' and run_state.final_path %}
-    <div class="flash flash-success" style="margin-top: 1rem;">
-        Document complete: {{ "{:,}".format(run_state.final_words) }} words at {{ run_state.final_path }}
+    <div class="flash flash-success mt-2">
+        Done. <strong>{{ "{:,}".format(run_state.final_words) }}</strong> words at
+        <span class="mono">{{ run_state.final_path }}</span>
+    </div>
+    <div class="actions mt-2">
+        <a href="/project_download_final_docx?project_dir={{ info.root | urlencode }}"
+           class="btn btn-primary">&darr; Word (.docx)</a>
+        <a href="/project_download_final?project_dir={{ info.root | urlencode }}"
+           class="btn btn-secondary">&darr; Markdown</a>
+    </div>
+    {% elif info.final_exists %}
+    <div class="actions mt-2">
+        <a href="/project_download_final_docx?project_dir={{ info.root | urlencode }}"
+           class="btn btn-primary">&darr; Word (.docx)</a>
+        <a href="/project_download_final?project_dir={{ info.root | urlencode }}"
+           class="btn btn-secondary">&darr; Markdown</a>
     </div>
     {% endif %}
 </div>
 
-<!-- Thesis Analysis -->
 {% if doc_review %}
 <div class="card">
-    <h2>Thesis Analysis</h2>
+    <h2>Thesis analysis</h2>
 
     <div class="form-row">
-        <label>Problem Statement</label>
-        <p style="font-size: 0.9rem;">{{ doc_review.problem_statement }}</p>
+        <label>Key question</label>
+        <p style="font-family: var(--font-serif); font-size: 1.1rem; color: var(--accent); font-weight: 600;">
+            {{ doc_review.key_question }}
+        </p>
+    </div>
+
+    <div class="split">
+        <div class="form-row">
+            <label>Problem statement</label>
+            <p>{{ doc_review.problem_statement }}</p>
+        </div>
+        <div class="form-row">
+            <label>Existing gap</label>
+            <p>{{ doc_review.existing_gap }}</p>
+        </div>
     </div>
 
     <div class="form-row">
-        <label>Need for Resolution</label>
-        <p style="font-size: 0.9rem;">{{ doc_review.need_for_resolution }}</p>
-    </div>
-
-    <div class="form-row">
-        <label>Existing Gap</label>
-        <p style="font-size: 0.9rem;">{{ doc_review.existing_gap }}</p>
-    </div>
-
-    <div class="form-row">
-        <label>Key Question</label>
-        <p style="font-size: 0.9rem; font-weight: 600; color: var(--accent);">{{ doc_review.key_question }}</p>
-    </div>
-
-    <div class="form-row">
-        <label>Key Themes</label>
-        <div>
+        <label>Key themes</label>
+        <div class="chip-group">
             {% for theme in doc_review.key_themes %}
-            <span class="tag" style="margin: 0.15rem; background: rgba(108, 140, 255, 0.15); color: var(--accent);">{{ theme }}</span>
+            <span class="tag tag-accent">{{ theme }}</span>
             {% endfor %}
         </div>
     </div>
 
     {% if doc_review.narrative_arc %}
-    <div class="form-row">
-        <label>Narrative Arc</label>
-        <p style="font-size: 0.85rem; color: var(--text-dim);">{{ doc_review.narrative_arc }}</p>
-    </div>
+    <details>
+        <summary>Narrative arc</summary>
+        <p class="muted">{{ doc_review.narrative_arc }}</p>
+    </details>
     {% endif %}
 
     {% if doc_review.section_mappings %}
-    <div class="form-row">
-        <label>Section Roles</label>
+    <details>
+        <summary>Section roles ({{ doc_review.section_mappings | length }})</summary>
         <table>
             <thead>
-                <tr>
-                    <th>Section</th>
-                    <th>Role</th>
-                    <th>Answers Question By</th>
-                </tr>
+                <tr><th>Section</th><th>Role</th><th>Answers question by</th></tr>
             </thead>
             <tbody>
                 {% for m in doc_review.section_mappings %}
                 <tr>
                     <td>{{ m.section }}</td>
                     <td>{{ m.role }}</td>
-                    <td style="font-size: 0.8rem; color: var(--text-dim);">{{ m.answers_question_by }}</td>
+                    <td class="muted small">{{ m.answers_question_by }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
-    </div>
+    </details>
     {% endif %}
 </div>
 {% endif %}
 
-<!-- Plan Details -->
 {% if plan %}
 <div class="card">
-    <h2>Plan</h2>
+    <h2>Plan <span class="muted" style="font-weight: 400; font-size: 0.9rem;">{{ plan.chunks | length }} chunks</span></h2>
     <table>
         <thead>
-            <tr>
-                <th>ID</th>
-                <th>Title</th>
-                <th>Depth</th>
-                <th>Words</th>
-                <th>Sources</th>
-            </tr>
+            <tr><th>ID</th><th>Title</th><th>Depth</th><th>Words</th><th>Sources</th></tr>
         </thead>
         <tbody>
             {% for chunk in plan.chunks %}
@@ -183,49 +235,58 @@
     </table>
 
     {% if plan.gaps %}
-    <div style="margin-top: 1rem;">
-        <h2 style="font-size: 0.95rem; color: var(--warning);">Gaps ({{ plan.gaps | length }})</h2>
+    <details class="mt-2">
+        <summary style="color: var(--warning);">Gaps ({{ plan.gaps | length }})</summary>
         {% for g in plan.gaps %}
-        <p class="hint" style="margin-top: 0.25rem;">* {{ g.bullet }} -- {{ g.issue }}</p>
+        <p class="hint">* {{ g.bullet }} -- {{ g.issue }}</p>
         {% endfor %}
-    </div>
+    </details>
     {% endif %}
 </div>
 {% endif %}
 
-<!-- Upload More Refs -->
 <div class="card">
-    <h2>Reference Files</h2>
+    <h2>Reference files <span class="muted" style="font-weight: 400; font-size: 0.9rem;">{{ info.refs | length }}</span></h2>
     {% if info.refs %}
-    <div style="margin-bottom: 1rem;">
+    <div class="chip-group mb-2">
         {% for ref in info.refs %}
-        <span class="tag" style="margin: 0.15rem;">{{ ref }}</span>
+        <span class="tag">{{ ref }}</span>
         {% endfor %}
     </div>
     {% else %}
-    <p class="hint" style="margin-bottom: 1rem;">No reference files uploaded yet.</p>
+    <p class="hint mb-2">No reference files yet.</p>
     {% endif %}
 
     <form action="/upload_refs" method="POST" enctype="multipart/form-data">
         <input type="hidden" name="project_dir" value="{{ info.root }}">
-        <div class="form-row">
-            <input type="file" name="refs" multiple accept=".pdf,.docx,.xlsx,.md,.txt,.csv">
+        <label class="dropzone compact">
+            <div class="flex">
+                <div class="dropzone-icon">+</div>
+                <div>
+                    <div class="dropzone-label">Add more references</div>
+                    <div class="dropzone-hint">PDF, DOCX, XLSX, MD, TXT, CSV</div>
+                </div>
+            </div>
+            <div class="dropzone-filelist" id="ref-upload-files"></div>
+            <input type="file" name="refs" id="ref-upload" multiple
+                   accept=".pdf,.docx,.xlsx,.md,.txt,.csv"
+                   onchange="updateRefFiles()">
+        </label>
+        <div class="actions">
+            <button type="submit" class="btn btn-secondary">Upload</button>
         </div>
-        <button type="submit" class="btn btn-secondary">Upload References</button>
     </form>
-</div>
-
-<!-- Navigation -->
-<div class="actions">
-    <a href="/" class="btn btn-secondary">New Project</a>
 </div>
 
 {% endblock %}
 
 {% block scripts %}
 <script>
-// Poll for status updates while running
 let polling = null;
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+}
 
 function startPolling() {
     if (polling) return;
@@ -234,31 +295,27 @@ function startPolling() {
             const resp = await fetch('/status');
             const data = await resp.json();
 
-            document.getElementById('status-msg').textContent = data.message;
-            document.getElementById('status-pct').textContent = data.progress + '%';
-            document.getElementById('progress-fill').style.width = data.progress + '%';
+            const msg = document.getElementById('status-msg');
+            if (msg) msg.textContent = data.message;
+            const pct = document.getElementById('status-pct');
+            if (pct) pct.textContent = data.progress + '%';
+            const fill = document.getElementById('progress-fill');
+            if (fill) fill.style.width = data.progress + '%';
 
             const chunksDone = document.getElementById('chunks-done');
             if (chunksDone) chunksDone.textContent = data.chunks_done;
 
-            // Update log
             const logBox = document.getElementById('log-box');
             if (logBox && data.log) {
-                logBox.innerHTML = data.log.map(l => '<p>' + l + '</p>').join('');
+                logBox.innerHTML = data.log.map(l => '<p>' + escapeHtml(l) + '</p>').join('');
                 logBox.scrollTop = logBox.scrollHeight;
             }
 
-            // Progress bar color
-            const fill = document.getElementById('progress-fill');
-            if (data.status === 'done') {
-                fill.classList.add('done');
-            }
+            if (fill && data.status === 'done') fill.classList.add('done');
 
-            // Stop polling when done or error
             if (data.status === 'done' || data.status === 'error' || data.status === 'idle') {
                 clearInterval(polling);
                 polling = null;
-                // Reload page to show final state
                 if (data.status === 'done' || data.status === 'error') {
                     setTimeout(() => location.reload(), 1000);
                 }
@@ -269,7 +326,20 @@ function startPolling() {
     }, 2000);
 }
 
-// Auto-start polling if a run is active
+function updateRefFiles() {
+    const input = document.getElementById('ref-upload');
+    const container = document.getElementById('ref-upload-files');
+    const files = Array.from(input.files || []);
+    container.innerHTML = files.map(f => `<span class="dropzone-filepill">${escapeHtml(f.name)}</span>`).join('');
+}
+
+document.querySelectorAll('.dropzone').forEach(zone => {
+    ['dragenter', 'dragover'].forEach(ev =>
+        zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.add('dragover'); }));
+    ['dragleave', 'drop'].forEach(ev =>
+        zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.remove('dragover'); }));
+});
+
 const currentStatus = '{{ run_state.status }}';
 if (['planning', 'writing', 'stitching', 'reviewing'].includes(currentStatus)) {
     startPolling();

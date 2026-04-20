@@ -1,84 +1,178 @@
 {% extends "base.html" %}
 {% block title %}Scribe -- Revise{% endblock %}
 
+{% set active_nav = 'revise' %}
+
 {% block content %}
 
-<div class="card">
-    <h2>Revise an existing draft</h2>
-    <p class="hint" style="margin-bottom: 1rem;">
-        Upload a completed draft (1,500+ words, with headings and citations) and
-        Scribe will audit it against the academic writing rules, then revise it
-        section by section. All citations, numbers, data, figures, and claims
-        are preserved exactly. The structure and argument stay yours; only the
-        prose is improved.
-    </p>
-    <p class="hint" style="margin-bottom: 1rem;">
-        This is different from "New project": generation writes a document
-        from scratch using an outline. Revision edits an existing document
-        in place. If you have a completed draft, use this.
-    </p>
-</div>
+<span class="eyebrow">Revise</span>
+<h2 class="page-title">Improve an existing draft</h2>
+<p class="page-subtitle">
+    Upload a finished document. Scribe audits it against the academic writing
+    rules, then revises each section. Citations, figures, numbers, and your
+    argument stay exactly as you wrote them &mdash; only the prose is sharpened.
+</p>
 
 {% if revise_state.status in ['idle', 'done', 'error'] %}
-<form action="/revise_start" method="POST" enctype="multipart/form-data">
 
-    <div class="card">
-        <h2>Source document <span class="badge">Required</span></h2>
-        <div class="form-row">
-            <label for="source">Upload your existing draft</label>
-            <input type="file" id="source" name="source"
-                   accept=".md,.docx,.doc,.txt,.markdown" required>
-            <p class="hint">
-                Markdown, Word (.docx/.doc), or plain text. Should be a
-                substantive draft with headings and citations, not an outline.
-                Default scaffold outlines are rejected.
-            </p>
-        </div>
-    </div>
+<form action="/revise_start" method="POST" enctype="multipart/form-data" id="revise-form">
 
-    <div class="card">
+    <div class="card card-feature">
         <h2>Output folder</h2>
         <div class="form-row">
             <label for="output_folder">Where to put the revised document and audit</label>
-            <input type="text" id="output_folder" name="output_folder"
-                   placeholder="e.g. C:\Users\David\Documents\my_paper_revised" required>
+            <div class="input-with-browse">
+                <input type="text" id="output_folder" name="output_folder"
+                       placeholder="Pick where Scribe should save the revised document..." required>
+                <button type="button" class="btn btn-secondary" onclick="pickFolder()">
+                    Browse...
+                </button>
+            </div>
             <p class="hint">
                 A new folder will be created if it doesn't exist. Outputs:
-                <code>revised.md</code> and <code>.scribe/audit.md</code>.
+                <span class="mono">revised.md</span> and
+                <span class="mono">.scribe/audit.md</span>.
             </p>
         </div>
     </div>
 
-    <div class="card">
-        <h2>Style guide <span class="badge" style="background: var(--surface2); color: var(--text-dim);">Optional</span></h2>
-        <div class="form-row">
-            <label for="style_guide">Override the built-in academic style (optional)</label>
-            <input type="file" id="style_guide" name="style_guide"
-                   accept=".md,.txt,.markdown,.doc,.docx">
-            <p class="hint">
-                Leave blank to use the built-in academic style and unified
-                writing rules (Allwood, Williams, Pinker, Sword, Schimel, etc.).
+    <div class="split">
+
+        <div class="card">
+            <h2>Source document <span class="tag tag-accent">required</span></h2>
+            <label class="dropzone" id="source-dropzone">
+                <div class="dropzone-icon">+</div>
+                <div class="dropzone-label">Drop your draft here or click to browse</div>
+                <div class="dropzone-hint">.md, .docx, .doc, .txt</div>
+                <div class="dropzone-filelist" id="source-files"></div>
+                <input type="file" id="source" name="source"
+                       accept=".md,.markdown,.txt,.doc,.docx" required
+                       onchange="updateDropzoneFiles(this, 'source-files')">
+            </label>
+            <p class="hint mt-1">
+                Should be a substantive draft with headings and citations
+                (1,500+ words). Scribe will reject a default scaffold outline.
+                To <em>write from</em> an outline, use
+                <a href="/new">New project</a>.
             </p>
         </div>
+
+        <div class="card">
+            <h2>Style <span class="tag">optional</span></h2>
+            <div class="radio-group">
+                <label>
+                    <input type="radio" name="style_choice" value="builtin" checked onchange="toggleStyleUpload()">
+                    <span>Built-in academic</span>
+                </label>
+                <label>
+                    <input type="radio" name="style_choice" value="upload" onchange="toggleStyleUpload()">
+                    <span>Upload custom</span>
+                </label>
+            </div>
+            <div id="style_upload_area" style="display: none;">
+                <label class="dropzone compact">
+                    <div class="flex">
+                        <div class="dropzone-icon">+</div>
+                        <div>
+                            <div class="dropzone-label">Drop style guide here</div>
+                            <div class="dropzone-hint">.md, .docx, .txt</div>
+                        </div>
+                    </div>
+                    <div class="dropzone-filelist" id="style-files"></div>
+                    <input type="file" id="style_guide" name="style_guide"
+                           accept=".md,.txt,.markdown,.doc,.docx"
+                           onchange="updateDropzoneFiles(this, 'style-files')">
+                </label>
+            </div>
+            <div id="style_builtin_info">
+                <p class="hint">
+                    Uses the unified academic writing rules (Allwood six-element
+                    structure, Williams's characters/actions, Pinker's classic
+                    style, Sword's zombie nouns, Amazon's weasel-word discipline).
+                    Always on regardless.
+                </p>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="card card-ghost">
+        <details>
+            <summary>What Scribe will and won't change</summary>
+            <div class="revise-guarantee">
+                <div class="guarantee-col">
+                    <h4 class="guarantee-heading guarantee-keep">Preserved exactly</h4>
+                    <ul>
+                        <li>Every citation (inline and in the reference list)</li>
+                        <li>Every number, percentage, range, unit, and date</li>
+                        <li>Every figure and table reference</li>
+                        <li>Your argument, framework, and terminology</li>
+                        <li>Section structure and heading hierarchy</li>
+                    </ul>
+                </div>
+                <div class="guarantee-col">
+                    <h4 class="guarantee-heading guarantee-change">Sharpened</h4>
+                    <ul>
+                        <li>Zombie nouns and empty verbs &rarr; concrete action</li>
+                        <li>Clutter phrases &rarr; concise alternatives</li>
+                        <li>Weasel words and unwarranted certainty</li>
+                        <li>Sentence rhythm, topic/stress positions, parallel lists</li>
+                        <li>Transitions between sections (light smoothing only)</li>
+                    </ul>
+                </div>
+            </div>
+        </details>
     </div>
 
     <div class="actions">
-        <button type="submit" class="btn btn-primary">Start revision</button>
+        <button type="submit" class="btn btn-primary btn-cta">Start revision</button>
+        <a href="/" class="btn btn-ghost">Cancel</a>
     </div>
 
 </form>
+
 {% endif %}
 
 {% if revise_state.status not in ['idle'] %}
-<div class="card">
-    <h2>Revision progress
-        <span class="status-badge status-{{ revise_state.status }}">{{ revise_state.status }}</span>
-    </h2>
 
-    <div style="margin-bottom: 1rem;">
-        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.25rem;">
+<div class="card card-feature">
+    <div class="flex-between" style="margin-bottom: 1rem;">
+        <h2 style="margin-bottom: 0;">Revision progress</h2>
+        <span class="status-badge status-{{ revise_state.status }}">{{ revise_state.status }}</span>
+    </div>
+
+    <div class="stage-track" id="stage-track"
+         data-status="{{ revise_state.status }}"
+         data-progress="{{ revise_state.progress }}">
+        <div class="stage" data-stage="parse" data-min="0" data-max="14">
+            <div class="stage-dot">1</div>
+            <div class="stage-label">Parse</div>
+            <div class="stage-detail">Split into sections</div>
+        </div>
+        <div class="stage-bar"><span></span></div>
+        <div class="stage" data-stage="audit" data-min="15" data-max="30">
+            <div class="stage-dot">2</div>
+            <div class="stage-label">Audit</div>
+            <div class="stage-detail">Opus reviews against rules</div>
+        </div>
+        <div class="stage-bar"><span></span></div>
+        <div class="stage" data-stage="revise" data-min="31" data-max="81">
+            <div class="stage-dot">3</div>
+            <div class="stage-label">Revise</div>
+            <div class="stage-detail">Sonnet, parallel sections</div>
+        </div>
+        <div class="stage-bar"><span></span></div>
+        <div class="stage" data-stage="smooth" data-min="82" data-max="100">
+            <div class="stage-dot">4</div>
+            <div class="stage-label">Smooth</div>
+            <div class="stage-detail">Transitions and consistency</div>
+        </div>
+    </div>
+
+    <div class="progress-summary" style="margin-top: 1.25rem;">
+        <div class="flex-between" style="margin-bottom: 0.35rem; font-size: 0.85rem;">
             <span id="status-msg">{{ revise_state.message }}</span>
-            <span id="status-pct">{{ revise_state.progress }}%</span>
+            <span id="status-pct" class="mono muted">{{ revise_state.progress }}%</span>
         </div>
         <div class="progress-bar">
             <div class="progress-fill {% if revise_state.status == 'done' %}done{% endif %}"
@@ -86,35 +180,57 @@
                  style="width: {{ revise_state.progress }}%"></div>
         </div>
         {% if revise_state.sections_total > 0 %}
-        <p class="hint" id="sections-info">
-            Sections: <span id="sections-done">{{ revise_state.sections_done }}</span> / {{ revise_state.sections_total }} revised
+        <p class="hint" id="sections-info" style="margin-top: 0.35rem;">
+            Sections revised: <span id="sections-done">{{ revise_state.sections_done }}</span> / {{ revise_state.sections_total }}
         </p>
         {% endif %}
     </div>
 
-    <div class="log-box" id="log-box">
-        {% for line in revise_state.log %}
-        <p>{{ line }}</p>
-        {% endfor %}
-    </div>
-
     {% if revise_state.status == 'error' and revise_state.error %}
-    <div class="flash flash-error" style="margin-top: 1rem; white-space: pre-wrap; font-family: monospace; font-size: 0.78rem;">{{ revise_state.error[:2000] }}</div>
+    <div class="flash flash-error" style="margin-top: 1rem; white-space: pre-wrap; font-family: var(--font-mono); font-size: 0.78rem;">{{ revise_state.error[:2000] }}</div>
     {% endif %}
 
     {% if revise_state.status == 'done' and revise_state.revised_path %}
-    <div class="flash flash-success" style="margin-top: 1rem;">
-        Revision complete: {{ "{:,}".format(revise_state.original_words) }} -> {{ "{:,}".format(revise_state.revised_words) }} words.
+    <div class="revision-result">
+        <div class="stat-grid" style="margin-bottom: 1rem;">
+            <div class="stat-card">
+                <div class="value">{{ "{:,}".format(revise_state.original_words) }}</div>
+                <div class="label">Words in</div>
+            </div>
+            <div class="stat-card">
+                <div class="value">{{ "{:,}".format(revise_state.revised_words) }}</div>
+                <div class="label">Words out</div>
+            </div>
+            <div class="stat-card">
+                <div class="value">{{ revise_state.sections_done }}/{{ revise_state.sections_total }}</div>
+                <div class="label">Sections revised</div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <a href="/revise_download_docx" class="btn btn-primary">&darr; Word (.docx)</a>
+            <a href="/revise_download" class="btn btn-secondary">&darr; Markdown</a>
+            <a href="/revise_download_audit" class="btn btn-secondary">&darr; Audit</a>
+            <a href="/revise" class="btn btn-ghost">New revision</a>
+        </div>
+        <p class="hint mt-2">
+            Files saved at <span class="mono">{{ revise_state.revised_path }}</span>
+            and the audit (JSON + Markdown) under
+            <span class="mono">.scribe/audit.json</span>.
+        </p>
     </div>
-    <div class="actions" style="margin-top: 1rem;">
-        <a href="/revise_download" class="btn btn-primary">Download revised.md</a>
-        <a href="/revise_download_audit" class="btn btn-secondary">Download audit</a>
-    </div>
-    <p class="hint" style="margin-top: 0.5rem;">
-        Files also saved at: <code>{{ revise_state.revised_path }}</code>
-    </p>
     {% endif %}
+
+    <details style="margin-top: 1.5rem;">
+        <summary>Activity log</summary>
+        <div class="log-box" id="log-box" style="margin-top: 0.75rem;">
+            {% for line in revise_state.log %}
+            <p>{{ line }}</p>
+            {% endfor %}
+        </div>
+    </details>
 </div>
+
 {% endif %}
 
 {% endblock %}
@@ -122,6 +238,94 @@
 {% block scripts %}
 <script>
 let polling = null;
+
+function toggleStyleUpload() {
+    const choice = document.querySelector('input[name="style_choice"]:checked').value;
+    document.getElementById('style_upload_area').style.display = choice === 'upload' ? 'block' : 'none';
+    document.getElementById('style_builtin_info').style.display = choice === 'builtin' ? 'block' : 'none';
+}
+
+async function pickFolder() {
+    try {
+        const resp = await fetch('/api/pick_folder', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({title: 'Choose revised-document folder'})
+        });
+        const data = await resp.json();
+        if (data.path) {
+            document.getElementById('output_folder').value = data.path;
+        }
+    } catch (e) {
+        console.error('Folder picker failed:', e);
+    }
+}
+
+function updateDropzoneFiles(input, containerId, multiple = false) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const files = Array.from(input.files || []);
+    container.innerHTML = files.map((f, i) =>
+        `<span class="dropzone-filepill">
+            ${escapeHtml(f.name)}
+            <span class="remove" title="Remove" onclick="removeFile('${input.id}', ${i})">&times;</span>
+        </span>`
+    ).join('');
+}
+
+function removeFile(inputId, idx) {
+    const input = document.getElementById(inputId);
+    const dt = new DataTransfer();
+    Array.from(input.files).forEach((f, i) => { if (i !== idx) dt.items.add(f); });
+    input.files = dt.files;
+    const container = input.closest('.dropzone').querySelector('.dropzone-filelist');
+    if (container) updateDropzoneFiles(input, container.id, input.multiple);
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+}
+
+document.querySelectorAll('.dropzone').forEach(zone => {
+    ['dragenter', 'dragover'].forEach(ev =>
+        zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.add('dragover'); }));
+    ['dragleave', 'drop'].forEach(ev =>
+        zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.remove('dragover'); }));
+});
+
+function updateStageTrack(progress, status) {
+    const track = document.getElementById('stage-track');
+    if (!track) return;
+    const stages = track.querySelectorAll('.stage');
+    const bars = track.querySelectorAll('.stage-bar');
+    stages.forEach((s, i) => {
+        const min = parseInt(s.dataset.min, 10);
+        const max = parseInt(s.dataset.max, 10);
+        s.classList.remove('active', 'done');
+        if (progress >= max) s.classList.add('done');
+        else if (progress >= min) s.classList.add('active');
+    });
+    bars.forEach((b, i) => {
+        const next = stages[i + 1];
+        if (next && next.classList.contains('done')) {
+            b.classList.add('done');
+            b.classList.remove('active');
+        } else if (next && next.classList.contains('active')) {
+            b.classList.add('active');
+            b.classList.remove('done');
+        } else {
+            b.classList.remove('active', 'done');
+        }
+    });
+    if (status === 'done') {
+        stages.forEach(s => { s.classList.remove('active'); s.classList.add('done'); });
+        bars.forEach(b => { b.classList.remove('active'); b.classList.add('done'); });
+    }
+    if (status === 'error') {
+        const active = track.querySelector('.stage.active');
+        if (active) active.classList.add('error');
+    }
+}
 
 function startPolling() {
     if (polling) return;
@@ -142,9 +346,11 @@ function startPolling() {
 
             const logBox = document.getElementById('log-box');
             if (logBox && data.log) {
-                logBox.innerHTML = data.log.map(l => '<p>' + l.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</p>').join('');
+                logBox.innerHTML = data.log.map(l => '<p>' + escapeHtml(l) + '</p>').join('');
                 logBox.scrollTop = logBox.scrollHeight;
             }
+
+            updateStageTrack(data.progress || 0, data.status);
 
             if (fill && data.status === 'done') fill.classList.add('done');
 
@@ -152,13 +358,20 @@ function startPolling() {
                 clearInterval(polling);
                 polling = null;
                 if (data.status === 'done' || data.status === 'error') {
-                    setTimeout(() => location.reload(), 1000);
+                    setTimeout(() => location.reload(), 1200);
                 }
             }
         } catch (e) {
             console.error('Poll failed:', e);
         }
     }, 2000);
+}
+
+const track = document.getElementById('stage-track');
+if (track) {
+    const progress = parseInt(track.dataset.progress || '0', 10);
+    const status = track.dataset.status || 'idle';
+    updateStageTrack(progress, status);
 }
 
 const currentStatus = '{{ revise_state.status }}';

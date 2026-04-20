@@ -110,4 +110,9 @@ async def run_revision_stitcher(
     project.revised_path.write_text(final_text, encoding="utf-8")
     logger.info("Revised document: %d words at %s",
                 len(final_text.split()), project.revised_path)
+
+    # Auto-export a Word version alongside the markdown. Non-fatal on failure.
+    from scribe.export import try_export_sibling
+    try_export_sibling(project.revised_path)
+
     return project.revised_path

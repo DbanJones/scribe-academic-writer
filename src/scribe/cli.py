@@ -734,6 +734,44 @@ def revise(
 
 
 @app.command()
+def export(
+    markdown: Path = typer.Argument(
+        ...,
+        help="Path to the markdown file to export (.md).",
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", "-o",
+        help="Output .docx path. Defaults to <markdown>.docx.",
+    ),
+    title: str | None = typer.Option(
+        None, "--title",
+        help="Document title (used for the Title-styled heading). Defaults to the first H1.",
+    ),
+) -> None:
+    """Convert a markdown file to a formatted Word (.docx) document.
+
+    Preserves heading hierarchy, bullets, numbered lists, tables, inline
+    formatting, figure captions, and bibliography entries. Visual suggestion
+    placeholders render as boxed callouts.
+    """
+    from scribe.export import export_file
+
+    if not markdown.exists():
+        console.print(f"[red]Not found: {markdown}[/red]")
+        raise typer.Exit(1)
+
+    output_path = output or markdown.with_suffix(".docx")
+    console.print(f"[bold]Exporting:[/bold] {markdown}")
+    try:
+        result = export_file(markdown, output_path, title=title)
+    except Exception as e:  # noqa: BLE001
+        console.print(f"[red]Export failed:[/red] {type(e).__name__}: {e}")
+        raise typer.Exit(1)
+    size_kb = result.stat().st_size / 1024
+    console.print(f"[green]Wrote:[/green] {result} ({size_kb:.1f} KB)")
+
+
+@app.command()
 def expand(
     source: Path = typer.Argument(
         ...,
