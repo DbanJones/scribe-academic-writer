@@ -1341,6 +1341,12 @@ def expand_download_plan():
 # Claude CLI auth routes
 # ---------------------------------------------------------------------------
 
+@app.route("/help")
+def help_view():
+    """Combined help + tutorials page."""
+    return render_template("help.html", active_nav="help")
+
+
 @app.route("/login")
 def login_view():
     """Login page: shows CLI status, login button, and streaming output."""

@@ -26,6 +26,7 @@
                 <a href="/revise" class="{% if active_nav == 'revise' %}active{% endif %}">Revise</a>
                 <a href="/expand" class="{% if active_nav == 'expand' %}active{% endif %}">Expand</a>
                 <a href="/restyle" class="{% if active_nav == 'restyle' %}active{% endif %}">Restyle</a>
+                <a href="/help" class="{% if active_nav == 'help' %}active{% endif %}">Help</a>
                 {% if auth_status %}
                 <a href="/login" class="auth-chip {% if active_nav == 'login' %}active{% endif %}"
                    title="{{ auth_status.cli_path or 'Claude CLI not found' }}">

@@ -5,10 +5,22 @@
 
 {% block content %}
 
+{% if not recents %}
+<div class="welcome-banner">
+    <div>
+        <strong>First time here?</strong>
+        Not sure which mode fits your situation?
+        The <a href="/help#which-mode">Help page</a> has a short guide and
+        walkthroughs for each of the four modes.
+    </div>
+    <a href="/help" class="btn btn-secondary btn-sm">Open help &rarr;</a>
+</div>
+{% endif %}
+
 <div class="welcome">
     <h2 class="page-title">What are you working on?</h2>
     <p class="page-subtitle">
-        Three modes, picked by where you are in the writing process.
+        Four modes, picked by where you are in the writing process.
         Each uses Claude against the same unified academic writing rules
         (Allwood, Williams, Pinker, Sword, Schimel, Zinsser, et al.).
     </p>

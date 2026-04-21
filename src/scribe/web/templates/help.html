@@ -1,0 +1,811 @@
+{% extends "base.html" %}
+{% block title %}Scribe -- Help & Tutorials{% endblock %}
+{% block container_class %}container-wide{% endblock %}
+
+{% block content %}
+
+<div class="help-layout">
+
+    <aside class="help-toc" id="help-toc">
+        <div class="toc-section">
+            <h4>Getting started</h4>
+            <a href="#what-is-scribe">What is Scribe?</a>
+            <a href="#first-time">First-time setup</a>
+            <a href="#which-mode">Which mode should I use?</a>
+        </div>
+        <div class="toc-section">
+            <h4>Modes</h4>
+            <a href="#mode-write">Write (new project)</a>
+            <a href="#mode-revise">Revise</a>
+            <a href="#mode-expand">Expand</a>
+            <a href="#mode-restyle">Restyle</a>
+        </div>
+        <div class="toc-section">
+            <h4>Reference</h4>
+            <a href="#outline-tags">Outline tags</a>
+            <a href="#writing-rules">Writing rules applied</a>
+            <a href="#outputs">Output formats</a>
+            <a href="#cli">CLI reference</a>
+        </div>
+        <div class="toc-section">
+            <h4>Troubleshooting</h4>
+            <a href="#faq">Common issues</a>
+        </div>
+    </aside>
+
+    <div class="help-body">
+
+        <span class="eyebrow">Help</span>
+        <h2 class="page-title">How to use Scribe</h2>
+        <p class="page-subtitle">
+            A practical guide to the four modes, the conventions Scribe
+            enforces, and the output you'll get back.
+        </p>
+
+        <!-- ================================================================ -->
+        <!--  GETTING STARTED                                                  -->
+        <!-- ================================================================ -->
+
+        <section id="what-is-scribe" class="help-section">
+            <h2>What is Scribe?</h2>
+            <p>
+                Scribe is a writing tool for academic prose. It takes one of
+                three starting points -- an outline, an existing draft, or a
+                finished paper -- and produces polished output against a
+                unified set of academic writing rules (Allwood's Cambridge
+                six-element structure, Williams on characters and actions,
+                Pinker on classic style, Sword on zombie nouns, Schimel's
+                hourglass, Zinsser on clutter, Amazon's weasel-word
+                discipline, Graff &amp; Birkenstein on citation as dialogue).
+            </p>
+            <p>
+                Everything Scribe writes is driven by Claude via the local
+                Claude Code CLI. Your documents never leave your machine;
+                usage is billed to your own Anthropic account or Max
+                subscription.
+            </p>
+        </section>
+
+        <section id="first-time" class="help-section">
+            <h2>First-time setup</h2>
+
+            <ol class="steps">
+                <li>
+                    <strong>Install the Claude Code CLI.</strong>
+                    See <a href="https://docs.claude.com/en/docs/claude-code/overview" target="_blank" rel="noopener">Anthropic's docs</a>
+                    (<code>brew install claude</code> on macOS). Scribe spawns
+                    Claude Code under the hood; without it, nothing will run.
+                </li>
+                <li>
+                    <strong>Check the connection indicator.</strong>
+                    The top-right of every page shows a dot:
+                    <span class="auth-dot auth-dot-ok" style="display: inline-block; margin: 0 4px;"></span> <em>Connected</em>,
+                    <span class="auth-dot auth-dot-warn" style="display: inline-block; margin: 0 4px;"></span> <em>Login required</em>,
+                    <span class="auth-dot auth-dot-err" style="display: inline-block; margin: 0 4px;"></span> <em>Install CLI</em>.
+                    Click it to sign in if required.
+                </li>
+                <li>
+                    <strong>Pick a mode from the Dashboard</strong> and feed
+                    it the right input. See below.
+                </li>
+            </ol>
+        </section>
+
+        <section id="which-mode" class="help-section">
+            <h2>Which mode should I use?</h2>
+
+            <div class="mode-picker-grid">
+                <div class="picker-card">
+                    <h4>I have an outline, no prose</h4>
+                    <p class="muted small">
+                        Headings and bullets, maybe a few references. You need
+                        Scribe to produce the first draft.
+                    </p>
+                    <a href="/new" class="btn btn-primary btn-sm">Write &rarr;</a>
+                </div>
+
+                <div class="picker-card">
+                    <h4>I have a finished draft, right length</h4>
+                    <p class="muted small">
+                        The substance is there. The prose needs to be tighter,
+                        more concrete, more academic. Word count stays similar.
+                    </p>
+                    <a href="/revise" class="btn btn-primary btn-sm">Revise &rarr;</a>
+                </div>
+
+                <div class="picker-card">
+                    <h4>I have a draft, need it longer</h4>
+                    <p class="muted small">
+                        A summary or short draft (1,500+ words) to expand into
+                        a full chapter or journal submission. Double or triple
+                        the length with added depth.
+                    </p>
+                    <a href="/expand" class="btn btn-primary btn-sm">Expand &rarr;</a>
+                </div>
+
+                <div class="picker-card">
+                    <h4>Switch citation style</h4>
+                    <p class="muted small">
+                        The paper is done but the target journal wants
+                        different formatting (Harvard to IEEE, APA to Nature,
+                        etc.).
+                    </p>
+                    <a href="/restyle" class="btn btn-primary btn-sm">Restyle &rarr;</a>
+                </div>
+            </div>
+
+            <div class="flash flash-warn" style="margin-top: 1rem;">
+                <strong>Important:</strong> Scribe enforces "right input for the
+                right mode". If you upload a finished 6,000-word draft as the
+                outline in Write mode, it will refuse and suggest Revise or
+                Expand. The modes are not interchangeable.
+            </div>
+        </section>
+
+        <!-- ================================================================ -->
+        <!--  WRITE                                                            -->
+        <!-- ================================================================ -->
+
+        <section id="mode-write" class="help-section help-mode help-mode-write">
+            <div class="mode-banner">
+                <span class="eyebrow">Write</span>
+                <h2>Write a new document from an outline</h2>
+                <p class="muted">
+                    Outline + references &rarr; new prose generated section by
+                    section against your style.
+                </p>
+            </div>
+
+            <h3>What you need</h3>
+            <ul>
+                <li><strong>outline.md</strong> &mdash; headings and bullets only.
+                    A scaffold like "# Introduction / - Opening context / - Thesis statement"
+                    is not enough; bullets must be specific to your topic.</li>
+                <li><strong>refs/</strong> &mdash; optional PDF, DOCX, XLSX, MD, TXT,
+                    or CSV source material. The planner decides which references
+                    belong to each chunk.</li>
+                <li><strong>style.md</strong> &mdash; optional custom style guide.
+                    The built-in academic rules apply regardless.</li>
+            </ul>
+
+            <h3>How Scribe runs it</h3>
+            <ol class="stages">
+                <li><strong>Document Review (Opus)</strong> &mdash; reads everything
+                    and identifies your problem statement, research gap, key question,
+                    themes, and how each section contributes to the argument.</li>
+                <li><strong>Plan (Opus)</strong> &mdash; chunks the document, assigns
+                    word budgets and references per chunk, and flags missing sources.</li>
+                <li><strong>Review TUI</strong> &mdash; approve or edit the plan before
+                    anything is written (web UI defaults to auto-approve).</li>
+                <li><strong>Write (Sonnet, in parallel)</strong> &mdash; each chunk is
+                    written with its thesis role injected.</li>
+                <li><strong>Stitch (Opus)</strong> &mdash; smooths transitions and
+                    enforces terminology consistency.</li>
+            </ol>
+
+            <h3>Walkthrough</h3>
+            <div class="walkthrough">
+                <div class="walk-step">
+                    <div class="walk-num">1</div>
+                    <div>
+                        Prepare an <code>outline.md</code>. A useful outline looks
+                        like this:
+<pre class="mono-block">
+# Chapter 3: Energy demand modelling
+
+## Introduction
+- Framing of the problem
+- Why existing models fail
+
+## ADIEM Layer 4 methodology [depth:rigorous]
+- Tile-level energy demand estimation [ref:refs/adiem_notes.md]
+- Monte Carlo uncertainty treatment
+- Calibration against Ookla data [ref:refs/ookla_sample.xlsx]
+
+## Results [depth:deep]
+- Country-level outputs
+- Sensitivity analysis
+</pre>
+                    </div>
+                </div>
+                <div class="walk-step">
+                    <div class="walk-num">2</div>
+                    <div>
+                        Open <a href="/new">New project</a>. Pick an output folder,
+                        drop the outline into the dropzone, upload any supporting PDFs
+                        or DOCX files, and click <strong>Create project</strong>.
+                    </div>
+                </div>
+                <div class="walk-step">
+                    <div class="walk-num">3</div>
+                    <div>
+                        On the project page, click <strong>Run Pipeline</strong>. The
+                        4-stage progress track shows Plan &rarr; Write &rarr; Stitch
+                        progress; a 10,000-word chapter takes roughly 12&ndash;20
+                        minutes.
+                    </div>
+                </div>
+                <div class="walk-step">
+                    <div class="walk-num">4</div>
+                    <div>
+                        When it finishes, download the result as <strong>Word
+                        (.docx)</strong> or Markdown. The document review
+                        (problem/gap/question/themes) is shown on the page.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================ -->
+        <!--  REVISE                                                           -->
+        <!-- ================================================================ -->
+
+        <section id="mode-revise" class="help-section help-mode help-mode-revise">
+            <div class="mode-banner">
+                <span class="eyebrow">Revise</span>
+                <h2>Sharpen an existing draft</h2>
+                <p class="muted">
+                    Existing prose &rarr; the same prose, only tighter. Length
+                    stays roughly the same. Citations, numbers, and argument
+                    preserved exactly.
+                </p>
+            </div>
+
+            <h3>What you need</h3>
+            <ul>
+                <li>A substantive draft (1,500+ words) with headings and citations.
+                    <code>.md</code>, <code>.docx</code>, <code>.doc</code>, or <code>.txt</code>.</li>
+                <li>Optional custom style guide.</li>
+            </ul>
+
+            <h3>What gets preserved</h3>
+            <table class="compare">
+                <thead>
+                    <tr><th>Preserved exactly</th><th>Sharpened</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Every citation (inline and in the reference list)</td>
+                        <td>Zombie nouns &rarr; concrete action verbs</td>
+                    </tr>
+                    <tr>
+                        <td>Every number, percentage, range, unit, date</td>
+                        <td>Clutter phrases &rarr; concise alternatives</td>
+                    </tr>
+                    <tr>
+                        <td>Every figure and table reference</td>
+                        <td>Weasel words and unwarranted certainty</td>
+                    </tr>
+                    <tr>
+                        <td>Your argument, framework, and terminology</td>
+                        <td>Sentence rhythm and stress positions</td>
+                    </tr>
+                    <tr>
+                        <td>Section structure and heading hierarchy</td>
+                        <td>Transitions between sections (light smoothing)</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>How Scribe runs it</h3>
+            <ol class="stages">
+                <li><strong>Parse</strong> &mdash; split into heading-delimited sections.</li>
+                <li><strong>Audit (Opus)</strong> &mdash; produces a structured
+                    <code>audit.json</code> with per-section issues (category,
+                    severity, quoted text, suggested fix), plus document-level
+                    assessment of the hourglass shape and six elements.</li>
+                <li><strong>Revise (Sonnet, parallel)</strong> &mdash; each section
+                    is revised with its audit findings as targeted guidance,
+                    under hard constraints on preservation.</li>
+                <li><strong>Smooth (Opus)</strong> &mdash; a light consistency
+                    pass across all sections.</li>
+            </ol>
+
+            <h3>Tested example</h3>
+            <p>
+                On the test document ("So What?" ICT energy literature summary),
+                6,367 words &rarr; 5,635 words in 11m04s. 14/14 citations preserved,
+                0 hallucinated, structural bug (misplaced content between Gap 3 and
+                Gap 4) detected and fixed. Audit report lists every specific change
+                the reviser was asked to make.
+            </p>
+        </section>
+
+        <!-- ================================================================ -->
+        <!--  EXPAND                                                           -->
+        <!-- ================================================================ -->
+
+        <section id="mode-expand" class="help-section help-mode help-mode-expand">
+            <div class="mode-banner">
+                <span class="eyebrow">Expand</span>
+                <h2>Deepen an existing draft</h2>
+                <p class="muted">
+                    Existing prose &rarr; longer prose with added depth.
+                    Same thesis, same citations, same claims &mdash; just
+                    unpacked further.
+                </p>
+            </div>
+
+            <h3>What you need</h3>
+            <ul>
+                <li>A substantive draft (1,500+ words) with headings and citations.</li>
+                <li>A target length: either a multiplier (e.g. 2.0x) or an exact word count.</li>
+                <li>Optional <strong>refs/</strong> &mdash; source material Scribe can
+                    read for deeper context and (sparingly) cite from. No sources
+                    are ever invented.</li>
+            </ul>
+
+            <h3>What Expand will and won't add</h3>
+            <table class="compare">
+                <thead>
+                    <tr><th>Added depth</th><th>Never introduced</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Unpacking compressed claims into mechanisms</td><td>New substantive claims the author didn't make</td></tr>
+                    <tr><td>Surfacing evidence that was implied</td><td>New citations unless from uploaded refs</td></tr>
+                    <tr><td>Addressing counter-arguments that belong in scope</td><td>Contradictions of existing statements</td></tr>
+                    <tr><td>Definitions of terms currently assumed</td><td>Drift from the author's thesis</td></tr>
+                    <tr><td>Methodology spelt out where skimmed</td><td>Rounded or altered numerical data</td></tr>
+                </tbody>
+            </table>
+
+            <h3>How Scribe runs it</h3>
+            <ol class="stages">
+                <li><strong>Parse</strong> &mdash; split into sections.</li>
+                <li><strong>Plan (Opus)</strong> &mdash; produces an expansion plan with
+                    per-section word budgets, "preserve" notes, and 2&ndash;6 specific
+                    expansion targets per section (e.g. "mechanism_compressed",
+                    "thin_evidence", "counterargument_missing").</li>
+                <li><strong>Expand (Sonnet, parallel)</strong> &mdash; each section gets
+                    its plan, the preserved-framework list, and available refs. May
+                    use Read/Grep to consult refs but cannot invent citations.</li>
+                <li><strong>Smooth (Opus)</strong> &mdash; final consistency pass.</li>
+            </ol>
+
+            <h3>Tested example</h3>
+            <p>
+                Same test document (6,244 words &rarr; 15,000 target, 2.4x) produced
+                a plan with 47 expansion targets across 17 sections. Preserved
+                framework correctly identified the author's coined terminology
+                (<em>stabilisation vs explosion camps</em>, five Gaps, PRE metric,
+                subsector carbon-intensity formula) as non-negotiable.
+            </p>
+        </section>
+
+        <!-- ================================================================ -->
+        <!--  RESTYLE                                                          -->
+        <!-- ================================================================ -->
+
+        <section id="mode-restyle" class="help-section help-mode help-mode-restyle">
+            <div class="mode-banner">
+                <span class="eyebrow">Restyle</span>
+                <h2>Change a paper's citation style</h2>
+                <p class="muted">
+                    Finished paper &rarr; same content, different citation format.
+                    Prose is unchanged except where rewording is strictly needed.
+                </p>
+            </div>
+
+            <h3>Supported styles</h3>
+            <p>
+                Harvard, APA, IEEE, Vancouver, Chicago author-date, Nature,
+                Science, Journal of Cleaner Production, Journal of Industrial
+                Ecology, Applied Energy, Energy Policy, IEEE Proceedings.
+            </p>
+            <p>
+                You can also build a custom preset form-driven from the
+                Restyle page (live preview, optional free-text rules). Saved
+                presets live in <code>src/scribe/citations/styles/custom/</code>
+                and are reusable.
+            </p>
+
+            <h3>Walkthrough</h3>
+            <div class="walkthrough">
+                <div class="walk-step">
+                    <div class="walk-num">1</div>
+                    <div>Open <a href="/restyle">Restyle</a>. Pick a source document,
+                        either by path or upload.</div>
+                </div>
+                <div class="walk-step">
+                    <div class="walk-num">2</div>
+                    <div>Choose a base style from the dropdown. The preview panel
+                        shows a before/after on a sample citation.</div>
+                </div>
+                <div class="walk-step">
+                    <div class="walk-num">3</div>
+                    <div>Optionally add free-text rules (e.g. "abbreviate months;
+                        DOIs on separate line") and save as a preset.</div>
+                </div>
+                <div class="walk-step">
+                    <div class="walk-num">4</div>
+                    <div>Click <strong>Restyle</strong>. Download the output as
+                        <code>.docx</code> or <code>.md</code>.</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================ -->
+        <!--  OUTLINE TAGS                                                     -->
+        <!-- ================================================================ -->
+
+        <section id="outline-tags" class="help-section">
+            <h2>Outline tags (Write mode)</h2>
+            <p>
+                When writing a new document from an outline, drop these inline
+                tags on headings or bullets to control generation per section.
+            </p>
+
+            <table class="reference">
+                <thead><tr><th>Tag</th><th>What it does</th><th>Example</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td><code>[depth:skim]</code></td>
+                        <td>Quickest treatment; minimum words</td>
+                        <td>Appendix context sections</td>
+                    </tr>
+                    <tr>
+                        <td><code>[depth:standard]</code></td>
+                        <td>Default depth</td>
+                        <td>Most body sections</td>
+                    </tr>
+                    <tr>
+                        <td><code>[depth:deep]</code></td>
+                        <td>Extra detail, more references pulled in</td>
+                        <td>Core analysis sections</td>
+                    </tr>
+                    <tr>
+                        <td><code>[depth:rigorous]</code></td>
+                        <td>Maximum unpacking; longest treatment</td>
+                        <td>Methodology, critical findings</td>
+                    </tr>
+                    <tr>
+                        <td><code>[ref:path/to/file.pdf]</code></td>
+                        <td>Force a specific reference into this chunk</td>
+                        <td>On a bullet that has a known source</td>
+                    </tr>
+                    <tr>
+                        <td><code>[ref:path#pages-5-10]</code></td>
+                        <td>Same as above, limit to specific pages</td>
+                        <td>Long PDFs where only one section matters</td>
+                    </tr>
+                    <tr>
+                        <td><code>[web]</code></td>
+                        <td>Allow web search for recent facts</td>
+                        <td>Sections about current events or markets</td>
+                    </tr>
+                    <tr>
+                        <td><code>[skip]</code></td>
+                        <td>Exclude from generation entirely</td>
+                        <td>Notes-to-self you don't want rendered</td>
+                    </tr>
+                    <tr>
+                        <td><code>[words:N]</code></td>
+                        <td>Force a specific word count</td>
+                        <td>Sections with a strict journal limit</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- ================================================================ -->
+        <!--  WRITING RULES                                                    -->
+        <!-- ================================================================ -->
+
+        <section id="writing-rules" class="help-section">
+            <h2>Writing rules Scribe applies</h2>
+            <p>
+                Every generation, revision, and expansion call carries the
+                same unified academic-writing rules preamble. It draws on:
+            </p>
+            <ul class="sources">
+                <li><strong>Allwood</strong> &mdash; Cambridge six-element paper
+                    structure (Context, Literature, Proposal, Test design, Results,
+                    Discussion) and the hourglass shape.</li>
+                <li><strong>Williams &amp; Bizup</strong> &mdash; characters as subjects,
+                    actions as verbs, old-to-new information flow.</li>
+                <li><strong>Pinker</strong> &mdash; classic style, syntactic tree
+                    management, curse-of-knowledge awareness.</li>
+                <li><strong>Sword</strong> &mdash; concrete nouns, vivid verbs, no
+                    zombie nouns.</li>
+                <li><strong>Schimel</strong> &mdash; story arcs at every level,
+                    stress-position emphasis.</li>
+                <li><strong>Strunk &amp; White</strong> &mdash; omit needless words,
+                    parallel structure, positive form.</li>
+                <li><strong>Zinsser</strong> &mdash; clutter as disease; replace wordy
+                    phrases with concise alternatives.</li>
+                <li><strong>Graff &amp; Birkenstein</strong> &mdash; citation as
+                    dialogue, not as footnote; position your contribution.</li>
+                <li><strong>Amazon six-pager discipline</strong> &mdash; quantify
+                    magnitude, avoid weasel words ("clearly", "interestingly").</li>
+                <li><strong>Moran</strong> &mdash; sentence rhythm, earn long
+                    sentences with short ones.</li>
+            </ul>
+            <p>
+                The full 43-rule synthesis ships with Scribe. You can read it
+                at <code>src/scribe/resources/academic_writing_rules.md</code>
+                or override by supplying a custom style guide.
+            </p>
+        </section>
+
+        <!-- ================================================================ -->
+        <!--  OUTPUTS                                                          -->
+        <!-- ================================================================ -->
+
+        <section id="outputs" class="help-section">
+            <h2>Output formats</h2>
+            <p>
+                Every pipeline produces both a <strong>markdown</strong> file
+                and a formatted <strong>Word (.docx)</strong> file. The .docx
+                handles heading hierarchy, bullets, numbered lists, tables,
+                bold/italic/code, hyperlinks, figure captions, boxed visual
+                suggestion placeholders, and bibliography entries with hanging
+                indent.
+            </p>
+
+            <table class="reference">
+                <thead><tr><th>Mode</th><th>Markdown</th><th>Word</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td>Write</td>
+                        <td><code>&lt;project&gt;/final.md</code></td>
+                        <td><code>&lt;project&gt;/final.docx</code></td>
+                    </tr>
+                    <tr>
+                        <td>Revise</td>
+                        <td><code>&lt;project&gt;/revised.md</code></td>
+                        <td><code>&lt;project&gt;/revised.docx</code></td>
+                    </tr>
+                    <tr>
+                        <td>Expand</td>
+                        <td><code>&lt;project&gt;/expanded.md</code></td>
+                        <td><code>&lt;project&gt;/expanded.docx</code></td>
+                    </tr>
+                    <tr>
+                        <td>Restyle</td>
+                        <td>same folder, <code>.restyled-&lt;style&gt;.md</code></td>
+                        <td>same folder, <code>.restyled-&lt;style&gt;.docx</code></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p>
+                Audit/plan artifacts (for Revise and Expand) live under
+                <code>&lt;project&gt;/.scribe/</code> and include both JSON
+                (machine readable) and Markdown (human readable) formats.
+            </p>
+        </section>
+
+        <!-- ================================================================ -->
+        <!--  CLI                                                              -->
+        <!-- ================================================================ -->
+
+        <section id="cli" class="help-section">
+            <h2>CLI reference</h2>
+            <p>Every mode works from the terminal too.</p>
+
+            <table class="reference">
+                <thead><tr><th>Command</th><th>Purpose</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td><code>scribe web</code></td>
+                        <td>Launch the web UI at http://127.0.0.1:5000</td>
+                    </tr>
+                    <tr>
+                        <td><code>scribe init &lt;dir&gt;</code></td>
+                        <td>Scaffold a new project folder</td>
+                    </tr>
+                    <tr>
+                        <td><code>scribe run &lt;dir&gt;</code></td>
+                        <td>Full Write pipeline on an existing project</td>
+                    </tr>
+                    <tr>
+                        <td><code>scribe revise &lt;file&gt; --output-dir &lt;dir&gt;</code></td>
+                        <td>Revise an existing draft</td>
+                    </tr>
+                    <tr>
+                        <td><code>scribe revise &lt;file&gt; --audit-only</code></td>
+                        <td>Produce the audit without revising (quick check)</td>
+                    </tr>
+                    <tr>
+                        <td><code>scribe expand &lt;file&gt; --target-words N</code></td>
+                        <td>Expand to a specific word count</td>
+                    </tr>
+                    <tr>
+                        <td><code>scribe expand &lt;file&gt; --multiplier N</code></td>
+                        <td>Expand by a multiplier (e.g. 2.5 for 2.5x)</td>
+                    </tr>
+                    <tr>
+                        <td><code>scribe expand &lt;file&gt; --plan-only</code></td>
+                        <td>Produce the expansion plan without expanding</td>
+                    </tr>
+                    <tr>
+                        <td><code>scribe restyle &lt;file&gt; --style apa</code></td>
+                        <td>Convert to a target citation style</td>
+                    </tr>
+                    <tr>
+                        <td><code>scribe list-styles</code></td>
+                        <td>List available citation styles</td>
+                    </tr>
+                    <tr>
+                        <td><code>scribe export &lt;file&gt;</code></td>
+                        <td>Convert a markdown file to a formatted .docx</td>
+                    </tr>
+                    <tr>
+                        <td><code>scribe status &lt;dir&gt;</code></td>
+                        <td>Show current state of a project</td>
+                    </tr>
+                    <tr>
+                        <td><code>scribe resume &lt;dir&gt;</code></td>
+                        <td>Resume an interrupted Write run</td>
+                    </tr>
+                    <tr>
+                        <td><code>scribe history &lt;dir&gt;</code></td>
+                        <td>List past runs</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- ================================================================ -->
+        <!--  FAQ                                                              -->
+        <!-- ================================================================ -->
+
+        <section id="faq" class="help-section">
+            <h2>Common issues</h2>
+
+            <details class="faq">
+                <summary>"outline.md is still the default scaffold shipped by scribe init"</summary>
+                <p>
+                    The generator refuses to run if the outline is still the
+                    placeholder "# My Document / ## Introduction / ## Body /
+                    ## Conclusion" template. Writing from an empty scaffold
+                    produces a meta-document about writing, not a paper about
+                    your topic.
+                </p>
+                <p>
+                    <strong>Fix:</strong> replace <code>outline.md</code> with
+                    a real outline, <em>or</em> if you actually have a finished
+                    draft, use <a href="/revise">Revise</a> or
+                    <a href="/expand">Expand</a> instead.
+                </p>
+            </details>
+
+            <details class="faq">
+                <summary>"Does not look like a substantive draft"</summary>
+                <p>
+                    Revise and Expand reject inputs that are too short or lack
+                    structure. They expect 1,500+ words with headings and some
+                    citations. If you have only an outline or a short sketch,
+                    use Write mode instead.
+                </p>
+            </details>
+
+            <details class="faq">
+                <summary>"Claude CLI not found" / "Login required"</summary>
+                <p>
+                    Scribe depends on the Claude Code CLI being installed and
+                    logged in. Install from
+                    <a href="https://docs.claude.com/en/docs/claude-code/overview" target="_blank" rel="noopener">Anthropic's docs</a>,
+                    then run <code>claude login</code> or click the auth chip
+                    in the top-right nav.
+                </p>
+            </details>
+
+            <details class="faq">
+                <summary>Pipeline crashed partway through; what happened to my work?</summary>
+                <p>
+                    Scribe saves per-section output incrementally:
+                </p>
+                <ul>
+                    <li>Write: drafts at <code>.scribe/drafts/</code>,
+                        state at <code>.scribe/state.json</code>. Run
+                        <code>scribe resume &lt;dir&gt;</code> to pick up
+                        from the last completed chunk.</li>
+                    <li>Revise: per-section revisions at
+                        <code>.scribe/revisions/</code>. Audit cached at
+                        <code>.scribe/audit.json</code>. Re-running reuses the
+                        audit and only re-runs the revise + smooth stages.</li>
+                    <li>Expand: per-section expansions at
+                        <code>.scribe/expansions/</code>. Plan cached at
+                        <code>.scribe/expansion_plan.json</code>. Same reuse logic.</li>
+                </ul>
+            </details>
+
+            <details class="faq">
+                <summary>The Word export doesn't look right</summary>
+                <p>
+                    Open the markdown file and spot-check: Scribe's exporter
+                    relies on clean markdown structure (blank lines between
+                    blocks, proper table syntax). If your source has unusual
+                    formatting, it may not round-trip perfectly. You can
+                    re-run <code>scribe export file.md</code> after fixing
+                    the source.
+                </p>
+                <p>
+                    For very specific journal submission templates, it's often
+                    easier to let Scribe produce clean markdown, then copy-paste
+                    into your journal's Word template.
+                </p>
+            </details>
+
+            <details class="faq">
+                <summary>How long does a run take?</summary>
+                <p>On typical hardware with a Max subscription:</p>
+                <ul>
+                    <li><strong>Write</strong>: 10-25 minutes for a 10-15k word chapter</li>
+                    <li><strong>Revise</strong>: 8-15 minutes for a 6-10k word document</li>
+                    <li><strong>Expand</strong>: 15-25 minutes for 6k &rarr; 15k words</li>
+                    <li><strong>Restyle</strong>: 2-5 minutes for a finished paper</li>
+                </ul>
+                <p>
+                    Parallelism is set to 3 concurrent sections by default; you
+                    can raise it in <code>config.yml</code> at the cost of hitting
+                    rate limits sooner.
+                </p>
+            </details>
+
+            <details class="faq">
+                <summary>Is my document sent to a server?</summary>
+                <p>
+                    No server that Scribe operates. Everything runs locally:
+                    the Flask UI on your machine, the Claude Code CLI spawning
+                    local processes, your files never leaving disk. API calls
+                    are made by the Claude CLI to Anthropic, billed to your
+                    own account or Max subscription.
+                </p>
+            </details>
+
+            <details class="faq">
+                <summary>Why does Scribe refuse to run New project on my finished document?</summary>
+                <p>
+                    Because the generator treats <code>outline.md</code> as a
+                    structural spec, not content. If you feed it prose, it
+                    either plans around the prose headings (producing a meta-
+                    document) or, if the outline is the default scaffold,
+                    fabricates citations to fill space. We hit this in testing
+                    and it was the reason Revise and Expand exist as separate
+                    modes. Use whichever mode matches your starting point.
+                </p>
+            </details>
+        </section>
+
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Highlight the active TOC link as you scroll
+const sections = document.querySelectorAll('.help-section[id]');
+const links = document.querySelectorAll('#help-toc a[href^="#"]');
+
+function updateActive() {
+    const offset = 120;
+    let current = null;
+    sections.forEach(s => {
+        const rect = s.getBoundingClientRect();
+        if (rect.top <= offset) current = s.id;
+    });
+    links.forEach(a => {
+        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+}
+
+window.addEventListener('scroll', updateActive, { passive: true });
+updateActive();
+
+// Smooth scroll
+links.forEach(a => {
+    a.addEventListener('click', e => {
+        const target = document.querySelector(a.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            window.scrollTo({ top: target.offsetTop - 80, behavior: 'smooth' });
+            history.replaceState(null, '', a.getAttribute('href'));
+        }
+    });
+});
+</script>
+{% endblock %}

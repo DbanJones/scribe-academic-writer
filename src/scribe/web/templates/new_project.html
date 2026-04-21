@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block title %}Scribe -- New Project{% endblock %}
+
+{% block content %}
+<span class="eyebrow">Set up</span>
+<h2 class="page-title">New project</h2>
+<p class="page-subtitle">
+    Choose where the project lives, drop in an outline and any references,
+    and Scribe will scaffold the rest.
+    <a href="/help#mode-write">Learn more &rarr;</a>
+</p>
+
+<form action="/create" method="POST" enctype="multipart/form-data" id="new-project-form">
+
+    <div class="card card-feature">
+        <h2>Project</h2>
+
+        <div class="form-row">
+            <label for="project_name">Name</label>
+            <input type="text" id="project_name" name="project_name"
+                   placeholder="e.g. ADIEM Chapter 3" required>
+        </div>
+
+        <div class="form-row">
+            <label for="output_folder">Folder</label>
+            <div class="input-with-browse">
+                <input type="text" id="output_folder" name="output_folder"
+                       placeholder="Where should this project live?" required>
+                <button type="button" class="btn btn-secondary" onclick="pickFolder()">
+                    Browse...
+                </button>
+            </div>
+            <p class="hint">Scribe creates this folder if it doesn't exist. A
+                file picker will open your OS's native folder chooser.</p>
+        </div>
+
+        <div class="form-row-inline-3">
+            <div>
+                <label for="default_depth">Default depth</label>
+                <select id="default_depth" name="default_depth">
+                    <option value="skim">Skim</option>
+                    <option value="standard" selected>Standard</option>
+                    <option value="deep">Deep</option>
+                    <option value="rigorous">Rigorous</option>
+                </select>
+            </div>
+            <div>
+                <label for="parallelism">Parallel chunks</label>
+                <input type="number" id="parallelism" name="parallelism" value="3" min="1" max="10">
+            </div>
+            <div>
+                <label>Models</label>
+                <label class="checkbox-label" style="padding: 0.55rem 0;">
+                    <input type="checkbox" name="all_opus" checked>
+                    Use Opus everywhere
+                </label>
+            </div>
+        </div>
+
+        <label class="checkbox-label">
+            <input type="checkbox" name="suggest_visuals" checked>
+            Suggest visual placements (charts, diagrams)
+        </label>
+    </div>
+
+    <div class="split">
+        <div class="card">
+            <h2>Outline <span class="tag tag-accent">required</span></h2>
+            <label class="dropzone" id="outline-dropzone">
+                <div class="dropzone-icon">+</div>
+                <div class="dropzone-label">Drop outline here or click to browse</div>
+                <div class="dropzone-hint">.md, .docx, .txt</div>
+                <div class="dropzone-filelist" id="outline-files"></div>
+                <input type="file" id="outline" name="outline"
+                       accept=".md,.txt,.markdown,.doc,.docx" required
+                       onchange="updateDropzoneFiles(this, 'outline-files')">
+            </label>
+            <p class="hint mt-1">
+                A real outline with your headings and bullets. Tags like
+                <span class="mono">[depth:deep]</span>,
+                <span class="mono">[ref:path]</span>,
+                <span class="mono">[web]</span> control generation per bullet.
+            </p>
+            <p class="hint mt-1" style="color: var(--warning);">
+                <strong>Already have a finished draft?</strong> Use
+                <a href="/revise">Revise</a> instead &mdash; it edits an existing
+                document without rewriting it.
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>Style</h2>
+            <div class="radio-group">
+                <label>
+                    <input type="radio" name="style_choice" value="builtin" checked onchange="toggleStyleUpload()">
+                    <span>Built-in academic</span>
+                </label>
+                <label>
+                    <input type="radio" name="style_choice" value="upload" onchange="toggleStyleUpload()">
+                    <span>Upload custom</span>
+                </label>
+            </div>
+            <div id="style_upload_area" style="display: none;">
+                <label class="dropzone compact">
+                    <div class="flex">
+                        <div class="dropzone-icon">+</div>
+                        <div>
+                            <div class="dropzone-label">Drop style guide here</div>
+                            <div class="dropzone-hint">.md, .docx, .txt</div>
+                        </div>
+                    </div>
+                    <div class="dropzone-filelist" id="style-files"></div>
+                    <input type="file" id="style_guide" name="style_guide"
+                           accept=".md,.txt,.markdown,.doc,.docx"
+                           onchange="updateDropzoneFiles(this, 'style-files')">
+                </label>
+            </div>
+            <div id="style_builtin_info">
+                <p class="hint">
+                    Built-in: British English, concise active voice, Harvard
+                    citations, no em dashes. Academic writing rules are
+                    always on.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>References <span class="tag">optional</span></h2>
+        <label class="dropzone" id="refs-dropzone">
+            <div class="dropzone-icon">+</div>
+            <div class="dropzone-label">Drop reference files here or click to browse</div>
+            <div class="dropzone-hint">PDF, DOCX, XLSX, MD, TXT, CSV &middot; multiple files ok</div>
+            <div class="dropzone-filelist" id="refs-files"></div>
+            <input type="file" id="refs" name="refs" multiple
+                   accept=".pdf,.docx,.xlsx,.md,.txt,.csv"
+                   onchange="updateDropzoneFiles(this, 'refs-files', true)">
+        </label>
+        <p class="hint mt-1">The planner assigns refs to each chunk automatically.</p>
+    </div>
+
+    <div class="actions">
+        <button type="submit" class="btn btn-primary btn-cta">Create project</button>
+        <a href="/" class="btn btn-ghost">Cancel</a>
+    </div>
+
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleStyleUpload() {
+    const choice = document.querySelector('input[name="style_choice"]:checked').value;
+    document.getElementById('style_upload_area').style.display = choice === 'upload' ? 'block' : 'none';
+    document.getElementById('style_builtin_info').style.display = choice === 'builtin' ? 'block' : 'none';
+}
+
+async function pickFolder() {
+    const resp = await fetch('/api/pick_folder', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({title: 'Choose project folder'})
+    });
+    const data = await resp.json();
+    if (data.path) {
+        const input = document.getElementById('output_folder');
+        input.value = data.path;
+        // Auto-fill project name from folder basename if empty
+        const nameInput = document.getElementById('project_name');
+        if (!nameInput.value) {
+            const parts = data.path.split(/[\\/]/).filter(Boolean);
+            if (parts.length) {
+                nameInput.value = parts[parts.length - 1]
+                    .replace(/_/g, ' ')
+                    .replace(/\b\w/g, c => c.toUpperCase());
+            }
+        }
+    }
+}
+
+function updateDropzoneFiles(input, containerId, multiple = false) {
+    const container = document.getElementById(containerId);
+    const files = Array.from(input.files || []);
+    container.innerHTML = files.map((f, i) =>
+        `<span class="dropzone-filepill">
+            ${escapeHtml(f.name)}
+            <span class="remove" title="Remove" onclick="removeFile('${input.id}', ${i})">&times;</span>
+        </span>`
+    ).join('');
+}
+
+function removeFile(inputId, idx) {
+    const input = document.getElementById(inputId);
+    const dt = new DataTransfer();
+    Array.from(input.files).forEach((f, i) => {
+        if (i !== idx) dt.items.add(f);
+    });
+    input.files = dt.files;
+    // Regenerate the display
+    const container = input.closest('.dropzone').querySelector('.dropzone-filelist');
+    updateDropzoneFiles(input, container.id, input.multiple);
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+}
+
+// Dropzone drag-and-drop highlight
+document.querySelectorAll('.dropzone').forEach(zone => {
+    ['dragenter', 'dragover'].forEach(ev =>
+        zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.add('dragover'); }));
+    ['dragleave', 'drop'].forEach(ev =>
+        zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.remove('dragover'); }));
+});
+</script>
+{% endblock %}

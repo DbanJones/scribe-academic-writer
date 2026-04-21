@@ -1,0 +1,492 @@
+{% extends "base.html" %}
+{% block title %}Scribe -- Restyle{% endblock %}
+
+{% set active_nav = 'restyle' %}
+
+{% block content %}
+
+<span class="eyebrow">Citation engine</span>
+<h2 class="page-title">Restyle a paper</h2>
+<p class="page-subtitle">
+    Upload any paper, or point Scribe at a file on disk. Every citation is
+    extracted, re-rendered in the target style, and the reference list is
+    rebuilt to match.
+    <a href="/help#mode-restyle">Learn more &rarr;</a>
+</p>
+
+<form action="/restyle_run" method="POST" enctype="multipart/form-data" id="restyle-form">
+
+    <div class="card card-feature">
+        <h2>Source document</h2>
+
+        <div class="radio-group">
+            <label>
+                <input type="radio" name="source_mode" value="path" checked onchange="toggleSourceMode()">
+                <span>File on this computer</span>
+            </label>
+            <label>
+                <input type="radio" name="source_mode" value="upload" onchange="toggleSourceMode()">
+                <span>Upload</span>
+            </label>
+        </div>
+
+        <div id="source-path-row" class="form-row">
+            <label for="paper_path">Path</label>
+            <div class="input-with-browse">
+                <input type="text" id="paper_path" name="paper_path"
+                       placeholder="Pick a .md or .docx file...">
+                <button type="button" class="btn btn-secondary" onclick="pickPaper()">
+                    Browse...
+                </button>
+            </div>
+            <p class="hint">Opens a native file picker. No upload needed --
+                Scribe reads directly from disk.</p>
+        </div>
+
+        <div id="source-upload-row" class="form-row" style="display: none;">
+            <label class="dropzone">
+                <div class="dropzone-icon">+</div>
+                <div class="dropzone-label">Drop a paper here or click to browse</div>
+                <div class="dropzone-hint">.md or .docx</div>
+                <div class="dropzone-filelist" id="paper-files"></div>
+                <input type="file" id="paper" name="paper" accept=".md,.markdown,.txt,.docx"
+                       onchange="updatePaperFile()">
+            </label>
+        </div>
+
+        <div class="form-row">
+            <label for="output_name">Output filename <span class="muted">(optional)</span></label>
+            <input type="text" id="output_name" name="output_name"
+                   placeholder="paper.restyled-apa.docx">
+            <p class="hint">Defaults to
+                <span class="mono">&lt;input&gt;.restyled-&lt;style&gt;.&lt;ext&gt;</span>.</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Target style</h2>
+        <div class="form-row-inline">
+            <div>
+                <label for="style">Base style</label>
+                <select id="style" name="style" onchange="onStyleChange()">
+                    <optgroup label="Parent styles">
+                        {% for s in styles.parents %}
+                        <option value="{{ s }}" data-kind="parent">{{ s }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    <optgroup label="Journal styles">
+                        {% for s in styles.journals %}
+                        <option value="{{ s }}" data-kind="journal">{{ s }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% if styles.custom %}
+                    <optgroup label="Custom presets">
+                        {% for s in styles.custom %}
+                        <option value="{{ s }}" data-kind="custom">{{ s }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endif %}
+                    <option value="__custom__" style="font-style: italic;">-- Build a custom style --</option>
+                </select>
+            </div>
+            <div>
+                <label for="model">Claude model</label>
+                <select id="model" name="model">
+                    <option value="opus" selected>Opus (best quality)</option>
+                    <option value="sonnet">Sonnet (faster)</option>
+                    <option value="haiku">Haiku (fastest)</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="style-info">
+            <div class="flex" style="flex-wrap: wrap; gap: 0.5rem;">
+                <strong id="style-name"></strong>
+                <span id="style-parent-badge" style="display: none;" class="parent-badge"></span>
+            </div>
+            <p id="style-desc" class="hint"></p>
+            <details id="style-diff-wrap" style="display: none;">
+                <summary>Overrides vs parent</summary>
+                <ul id="style-diff" class="diff-list"></ul>
+            </details>
+        </div>
+
+        <label class="checkbox-label mt-2">
+            <input type="checkbox" name="skip_polish">
+            Skip formatting polish (citations only)
+        </label>
+    </div>
+
+    <div class="card">
+        <h2>Live preview</h2>
+        <p class="hint mb-2">
+            Sample citation and references updated in real time as you tweak
+            the style or the custom rules below.
+        </p>
+        <div class="preview">
+            <div class="preview-section">
+                <span class="preview-label">In-text (parenthetical)</span>
+                <div id="preview-intext">--</div>
+            </div>
+            <div class="preview-section">
+                <span class="preview-label">In-text (narrative)</span>
+                <div id="preview-narrative">--</div>
+            </div>
+            <div class="preview-section">
+                <span class="preview-label">Bibliography &mdash; journal</span>
+                <div id="preview-bib-journal">--</div>
+            </div>
+            <div class="preview-section">
+                <span class="preview-label">Bibliography &mdash; book</span>
+                <div id="preview-bib-book">--</div>
+            </div>
+        </div>
+    </div>
+
+    <details class="card card-ghost" id="custom-rules-card">
+        <summary>Custom rule builder</summary>
+        <p class="hint mt-2">
+            Every field below overrides the chosen base style. Leave blank to
+            inherit. Save the configuration as a reusable preset.
+        </p>
+
+        <div class="form-row-inline mt-2">
+            <div>
+                <label for="custom_id">Preset id</label>
+                <input type="text" id="custom_id" name="custom_id"
+                       placeholder="my-thesis-style" pattern="[a-z0-9\-]+">
+            </div>
+            <div>
+                <label for="custom_name">Preset name</label>
+                <input type="text" id="custom_name" name="custom_name"
+                       placeholder="My Thesis Style">
+            </div>
+        </div>
+
+        {% for group_name, fields in schema.items() %}
+        <details>
+            <summary>{{ group_name }}</summary>
+            <div class="field-group">
+                {% for field in fields %}
+                <div>
+                    <label for="f_{{ field.path }}">{{ field.label }}</label>
+                    {% if field.widget == 'select' %}
+                        <select id="f_{{ field.path }}" name="override__{{ field.path }}">
+                            <option value="">(inherit)</option>
+                            {% for choice in field.choices %}
+                            <option value="{{ choice }}">{{ choice }}</option>
+                            {% endfor %}
+                        </select>
+                    {% elif field.widget == 'checkbox' %}
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="f_{{ field.path }}" name="override__{{ field.path }}" value="true">
+                            Enabled
+                        </label>
+                    {% elif field.widget == 'number' %}
+                        <input type="number" id="f_{{ field.path }}" name="override__{{ field.path }}"
+                               {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %}>
+                    {% elif field.widget == 'textarea' %}
+                        <textarea id="f_{{ field.path }}" name="override__{{ field.path }}" rows="2"
+                                  {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %}></textarea>
+                    {% else %}
+                        <input type="text" id="f_{{ field.path }}" name="override__{{ field.path }}"
+                               {% if field.placeholder %}placeholder="{{ field.placeholder }}"{% endif %}>
+                    {% endif %}
+                    {% if field.hint %}<p class="hint">{{ field.hint }}</p>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </details>
+        {% endfor %}
+
+        <div class="form-row mt-2">
+            <label for="additional_rules">Additional free-text rules</label>
+            <textarea id="additional_rules" name="additional_rules" rows="4"
+                      placeholder='e.g. "Always abbreviate months. Use Oxford commas only in lists of four or more items. Spell out DOIs on a separate line."'></textarea>
+        </div>
+
+        <div class="actions">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="savePreset()">Save as preset</button>
+            <span id="save-status" class="muted small"></span>
+        </div>
+    </details>
+
+    <div class="actions">
+        <button type="submit" class="btn btn-primary btn-cta">Restyle paper</button>
+        <a href="/" class="btn btn-ghost">Cancel</a>
+    </div>
+</form>
+
+<div id="restyle-run-panel" class="card" style="display: none;">
+    <h2>Progress <span id="rs-status-badge" class="status-badge status-idle">idle</span></h2>
+    <div class="flex-between small">
+        <span id="rs-msg">Starting...</span>
+        <span id="rs-pct" class="mono muted">0%</span>
+    </div>
+    <div class="progress-bar">
+        <div class="progress-fill" id="rs-fill" style="width: 0%"></div>
+    </div>
+    <details>
+        <summary>Live log</summary>
+        <div class="log-box" id="rs-log"></div>
+    </details>
+    <div id="rs-result" class="mt-2"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const SAMPLE = {
+    authors: [
+        {family: 'Smith', given: 'Jane A.'},
+        {family: 'Patel', given: 'Rohan'},
+        {family: 'Nguyen', given: 'Linh'}
+    ],
+    year: 2020,
+    title: 'Quantifying embodied energy in steel production',
+    journal: 'Journal of Cleaner Production',
+    journalAbbr: 'J. Clean. Prod.',
+    volume: 245, issue: 3, pages: '118-132',
+    doi: '10.1016/j.jclepro.2020.01.001',
+    type: 'journal'
+};
+
+const SAMPLE_BOOK = {
+    authors: [{family: 'Allwood', given: 'Julian M.'}, {family: 'Cullen', given: 'Jonathan M.'}],
+    year: 2012,
+    title: 'Sustainable materials -- with both eyes open',
+    publisher: 'UIT Cambridge',
+    place: 'Cambridge',
+    edition: '1st',
+    type: 'book'
+};
+
+function toggleSourceMode() {
+    const mode = document.querySelector('input[name="source_mode"]:checked').value;
+    document.getElementById('source-path-row').style.display = mode === 'path' ? 'block' : 'none';
+    document.getElementById('source-upload-row').style.display = mode === 'upload' ? 'block' : 'none';
+
+    // Require the right input; clear the other.
+    const paper = document.getElementById('paper');
+    const path = document.getElementById('paper_path');
+    if (mode === 'path') {
+        paper.removeAttribute('required');
+        paper.value = '';
+        document.getElementById('paper-files').innerHTML = '';
+    } else {
+        path.value = '';
+    }
+}
+
+async function pickPaper() {
+    const resp = await fetch('/api/pick_file', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            title: 'Choose a paper to restyle',
+            filetypes: [['Markdown or Word', 'md markdown docx txt']]
+        })
+    });
+    const data = await resp.json();
+    if (data.path) {
+        document.getElementById('paper_path').value = data.path;
+    }
+}
+
+function updatePaperFile() {
+    const input = document.getElementById('paper');
+    const container = document.getElementById('paper-files');
+    const files = Array.from(input.files || []);
+    container.innerHTML = files.map(f =>
+        `<span class="dropzone-filepill">${escapeHtml(f.name)}</span>`
+    ).join('');
+}
+
+async function refreshPreview() {
+    const styleId = document.getElementById('style').value;
+    const overrides = {};
+    document.querySelectorAll('[name^="override__"]').forEach(el => {
+        const key = el.name.replace('override__', '');
+        if (el.type === 'checkbox') {
+            if (el.checked) overrides[key] = true;
+        } else if (el.value) {
+            overrides[key] = el.value;
+        }
+    });
+    const resp = await fetch('/api/preview', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({style_id: styleId, overrides, sample: SAMPLE, sample_book: SAMPLE_BOOK})
+    });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    document.getElementById('preview-intext').innerHTML = renderMd(data.intext);
+    document.getElementById('preview-narrative').innerHTML = renderMd(data.narrative);
+    document.getElementById('preview-bib-journal').innerHTML = renderMd(data.bib_journal);
+    document.getElementById('preview-bib-book').innerHTML = renderMd(data.bib_book);
+
+    document.getElementById('style-name').textContent = data.style_name || styleId;
+    document.getElementById('style-desc').textContent = data.style_description || '';
+
+    const parentBadge = document.getElementById('style-parent-badge');
+    if (data.parent) {
+        parentBadge.textContent = 'inherits from ' + data.parent;
+        parentBadge.style.display = 'inline-flex';
+    } else {
+        parentBadge.style.display = 'none';
+    }
+
+    const diffWrap = document.getElementById('style-diff-wrap');
+    const diffList = document.getElementById('style-diff');
+    if (data.diffs && data.diffs.length) {
+        diffList.innerHTML = data.diffs.map(d => '<li>' + escapeHtml(d) + '</li>').join('');
+        diffWrap.style.display = 'block';
+    } else {
+        diffWrap.style.display = 'none';
+    }
+}
+
+function renderMd(s) {
+    if (!s) return '';
+    return escapeHtml(s)
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+        .replace(/\^([^^]+)\^/g, '<sup>$1</sup>');
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+}
+
+function onStyleChange() {
+    const sel = document.getElementById('style');
+    const isCustom = sel.value === '__custom__';
+    document.getElementById('custom-rules-card').open = isCustom;
+    refreshPreview();
+}
+
+document.querySelectorAll('[name^="override__"]').forEach(el => {
+    el.addEventListener('change', refreshPreview);
+    el.addEventListener('input', debounce(refreshPreview, 300));
+});
+
+function debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+async function savePreset() {
+    const styleId = document.getElementById('style').value;
+    const parent = styleId === '__custom__' ? null : styleId;
+    const customId = document.getElementById('custom_id').value;
+    const customName = document.getElementById('custom_name').value;
+    const rules = document.getElementById('additional_rules').value;
+    const overrides = {};
+    document.querySelectorAll('[name^="override__"]').forEach(el => {
+        const key = el.name.replace('override__', '');
+        if (el.type === 'checkbox') {
+            if (el.checked) overrides[key] = true;
+        } else if (el.value) {
+            overrides[key] = el.value;
+        }
+    });
+    const resp = await fetch('/api/save_preset', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            style_id: customId, style_name: customName, parent,
+            overrides, additional_rules: rules
+        })
+    });
+    const data = await resp.json();
+    const el = document.getElementById('save-status');
+    if (data.error) {
+        el.textContent = 'Error: ' + data.error;
+        el.style.color = 'var(--error)';
+    } else {
+        el.textContent = 'Saved as ' + data.style_id;
+        el.style.color = 'var(--success)';
+        setTimeout(() => location.reload(), 800);
+    }
+}
+
+document.getElementById('restyle-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const panel = document.getElementById('restyle-run-panel');
+    const log = document.getElementById('rs-log');
+    const result = document.getElementById('rs-result');
+
+    panel.style.display = 'block';
+    panel.scrollIntoView({behavior: 'smooth'});
+    log.innerHTML = '';
+    result.innerHTML = '';
+    document.getElementById('rs-status-badge').textContent = 'starting';
+    document.getElementById('rs-status-badge').className = 'status-badge status-extracting';
+
+    try {
+        const resp = await fetch('/restyle_run', {method: 'POST', body: fd});
+        if (!resp.ok) {
+            const txt = await resp.text();
+            throw new Error(txt);
+        }
+        pollRestyle();
+    } catch (err) {
+        document.getElementById('rs-status-badge').textContent = 'error';
+        document.getElementById('rs-status-badge').className = 'status-badge status-error';
+        log.innerHTML += '<p style="color: var(--error)">ERROR: ' + escapeHtml(String(err.message || err)) + '</p>';
+    }
+});
+
+let rsPolling = null;
+function pollRestyle() {
+    if (rsPolling) return;
+    rsPolling = setInterval(async () => {
+        try {
+            const resp = await fetch('/restyle_status');
+            const data = await resp.json();
+            const log = document.getElementById('rs-log');
+            const msg = document.getElementById('rs-msg');
+            const pct = document.getElementById('rs-pct');
+            const fill = document.getElementById('rs-fill');
+            const badge = document.getElementById('rs-status-badge');
+            const result = document.getElementById('rs-result');
+
+            msg.textContent = data.message || '';
+            pct.textContent = (data.progress || 0) + '%';
+            fill.style.width = (data.progress || 0) + '%';
+            badge.className = 'status-badge status-' + (data.status || 'idle');
+            badge.textContent = data.status || 'idle';
+
+            log.innerHTML = (data.log || []).map(l => '<p>' + escapeHtml(l) + '</p>').join('');
+            log.scrollTop = log.scrollHeight;
+
+            if (data.status === 'done') {
+                fill.classList.add('done');
+                clearInterval(rsPolling); rsPolling = null;
+                result.innerHTML = '<div class="flash flash-success">Done. Output: <span class="mono">' +
+                    escapeHtml(data.output_path || '') + '</span> &middot; ' +
+                    (data.in_text_count || 0) + ' citations, ' +
+                    (data.bibliography_count || 0) + ' references.</div>';
+            } else if (data.status === 'error') {
+                clearInterval(rsPolling); rsPolling = null;
+                result.innerHTML = '<div class="flash flash-error">' + escapeHtml(data.error || 'Unknown error') + '</div>';
+            }
+        } catch (e) {
+            console.error('Poll failed', e);
+        }
+    }, 1500);
+}
+
+// Dropzone highlight
+document.querySelectorAll('.dropzone').forEach(zone => {
+    ['dragenter', 'dragover'].forEach(ev =>
+        zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.add('dragover'); }));
+    ['dragleave', 'drop'].forEach(ev =>
+        zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.remove('dragover'); }));
+});
+
+refreshPreview();
+</script>
+{% endblock %}
