@@ -10,6 +10,7 @@
         <div class="toc-section">
             <h4>Getting started</h4>
             <a href="#what-is-scribe">What is Scribe?</a>
+            <a href="#connect-claude">Connect to Claude</a>
             <a href="#first-time">First-time setup</a>
             <a href="#which-mode">Which mode should I use?</a>
         </div>
@@ -66,27 +67,321 @@
             </p>
         </section>
 
+        <!-- ================================================================ -->
+        <!--  CONNECT TO CLAUDE                                                -->
+        <!-- ================================================================ -->
+
+        <section id="connect-claude" class="help-section">
+            <h2>Connect Scribe to your Claude account</h2>
+
+            <p>
+                Scribe does not talk to Anthropic's servers directly. Every
+                API call goes through the <strong>Claude Code CLI</strong>
+                installed on your machine. That means:
+            </p>
+
+            <ul>
+                <li>Your documents never leave your computer.</li>
+                <li>Usage is billed to <strong>your own</strong> Anthropic
+                    account (or your Max subscription) &mdash; not to Scribe or
+                    anyone else.</li>
+                <li>Scribe can't see your credentials; they live in the CLI's
+                    own settings (<code>~/.claude/</code>) or your OS keychain.</li>
+            </ul>
+
+            <p>
+                There are three pieces to get right: install the CLI, log in,
+                verify it works. A healthy setup shows a green
+                <span class="auth-dot auth-dot-ok" style="display: inline-block; margin: 0 4px;"></span>
+                Connected chip in the top-right of every Scribe page.
+            </p>
+
+            <h3>Step 1 &mdash; Install the Claude Code CLI</h3>
+
+            <p>
+                If you already have the CLI or the Claude desktop app,
+                skip to Step 2 &mdash; Scribe auto-detects either one.
+            </p>
+
+            <div class="mode-picker-grid">
+                <div class="picker-card">
+                    <h4>macOS</h4>
+                    <p class="muted small" style="margin: 0;">
+                        Easiest route is Homebrew:
+                    </p>
+<pre class="mono-block">brew install claude</pre>
+                    <p class="muted small" style="margin: 0;">
+                        Or download the installer from
+                        <a href="https://docs.claude.com/en/docs/claude-code/overview" target="_blank" rel="noopener">docs.claude.com</a>.
+                    </p>
+                </div>
+
+                <div class="picker-card">
+                    <h4>Windows</h4>
+                    <p class="muted small" style="margin: 0;">
+                        Install the <strong>Claude desktop app</strong> from
+                        <a href="https://claude.ai/download" target="_blank" rel="noopener">claude.ai/download</a>
+                        &mdash; it bundles the CLI. Scribe looks for
+                        <code>claude.exe</code> in the desktop app's app-data
+                        folder automatically.
+                    </p>
+                    <p class="muted small" style="margin: 0;">
+                        Or install via npm if you prefer a CLI-only setup:
+                    </p>
+<pre class="mono-block">npm install -g @anthropic-ai/claude-code</pre>
+                </div>
+
+                <div class="picker-card">
+                    <h4>Linux</h4>
+                    <p class="muted small" style="margin: 0;">
+                        Install via npm (Node.js required):
+                    </p>
+<pre class="mono-block">npm install -g @anthropic-ai/claude-code</pre>
+                    <p class="muted small" style="margin: 0;">
+                        Verify with <code>which claude</code>; it should
+                        resolve somewhere on your <code>$PATH</code>.
+                    </p>
+                </div>
+
+                <div class="picker-card">
+                    <h4>Verify the install</h4>
+                    <p class="muted small" style="margin: 0;">
+                        Open a terminal and run:
+                    </p>
+<pre class="mono-block">claude --version</pre>
+                    <p class="muted small" style="margin: 0;">
+                        If you see a version number, you're done with step 1.
+                        If you see "command not found", check your PATH or
+                        use the desktop app on Windows.
+                    </p>
+                </div>
+            </div>
+
+            <h3>Step 2 &mdash; Log in</h3>
+
+            <p>
+                The first time you use Scribe, Claude Code needs to be logged
+                into an Anthropic account. You have two equivalent options.
+            </p>
+
+            <div class="walkthrough">
+                <div class="walk-step">
+                    <div class="walk-num">A</div>
+                    <div>
+                        <strong>From Scribe's web UI</strong> (easiest).
+                        Click the amber "Login required" chip in the top-right
+                        nav, or open <a href="/login">/login</a> directly.
+                        Press <strong>"Login with Claude"</strong>. The CLI
+                        opens your default browser so you can sign in. Once
+                        you approve, the page will flip to "Connected" and
+                        you can close that tab.
+                    </div>
+                </div>
+
+                <div class="walk-step">
+                    <div class="walk-num">B</div>
+                    <div>
+                        <strong>From a terminal</strong>.
+                        Run <code>claude login</code> and follow the browser
+                        prompt. Scribe picks up the session automatically the
+                        next time you refresh.
+                    </div>
+                </div>
+            </div>
+
+            <p>
+                Either path asks you to sign in with the Anthropic account
+                that owns the API credits or Max subscription you want to
+                bill. If you have multiple accounts, the CLI remembers
+                whichever you chose last; run <code>claude logout</code> and
+                log in again to switch.
+            </p>
+
+            <div class="flash flash-info" style="margin-top: 1rem;">
+                <strong>Max subscribers:</strong> no extra configuration.
+                Scribe uses whatever entitlements the CLI has. A Max
+                subscription covers Opus and Sonnet usage, which is what
+                every Scribe pipeline calls under the hood.
+            </div>
+
+            <h3>Step 3 &mdash; Verify the connection</h3>
+
+            <p>
+                The top-right of every Scribe page shows one of three chips:
+            </p>
+
+            <table class="reference">
+                <thead>
+                    <tr><th>Chip</th><th>What it means</th><th>What to do</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>
+                            <span class="auth-dot auth-dot-ok" style="display: inline-block; margin-right: 4px;"></span>
+                            <strong>Connected</strong>
+                        </td>
+                        <td>Claude CLI installed and logged in. Pipelines will run.</td>
+                        <td>Nothing. You're good.</td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <span class="auth-dot auth-dot-warn" style="display: inline-block; margin-right: 4px;"></span>
+                            <strong>Login required</strong>
+                        </td>
+                        <td>CLI installed but not logged in (or your session expired).</td>
+                        <td>Click the chip &rarr; press "Login with Claude" &rarr; sign in.</td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <span class="auth-dot auth-dot-err" style="display: inline-block; margin-right: 4px;"></span>
+                            <strong>Install CLI</strong>
+                        </td>
+                        <td>No <code>claude</code> binary found on your PATH or in the desktop-app location.</td>
+                        <td>Go back to Step 1.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p>
+                Hover over the chip to see the exact path Scribe is using
+                for the CLI. If that path looks wrong (points at an old
+                version, say), uninstall the stale copy so Scribe picks up
+                the current one.
+            </p>
+
+            <h3>What Scribe does with your connection</h3>
+
+            <p>
+                For every run, Scribe spawns Claude Code as a subprocess with
+                a constrained tool set and your project folder as the working
+                directory. The model has read-only access to the files you've
+                uploaded plus the ability to use web search when the outline
+                tag <code>[web]</code> is set. Scribe never passes credentials
+                across the Python/SDK boundary; authentication happens entirely
+                inside the CLI process.
+            </p>
+
+            <p>
+                Every pipeline stage is a short, self-contained call. If you
+                see rate-limit warnings, lower <code>parallelism</code> in
+                <code>config.yml</code> (default is 3 concurrent sections) or
+                wait a few minutes before retrying.
+            </p>
+
+            <h3>Common connection problems</h3>
+
+            <details class="faq">
+                <summary>"Claude Code not found at &lt;path&gt;"</summary>
+                <p>
+                    The CLI was installed but the binary isn't on your PATH
+                    where Scribe looks. Fixes in order of effort:
+                </p>
+                <ul>
+                    <li><strong>macOS/Linux:</strong> run <code>which claude</code>;
+                        if it resolves, restart the web server
+                        (<code>scribe web</code>) so it picks up the current
+                        PATH.</li>
+                    <li><strong>Windows:</strong> install the Claude desktop
+                        app if you haven't &mdash; Scribe looks for it at
+                        <code>%LOCALAPPDATA%\packages\Claude_*\...\claude.exe</code>
+                        automatically.</li>
+                    <li>If you installed via npm, check that your npm global
+                        bin is on your PATH
+                        (<code>npm config get prefix</code>).</li>
+                </ul>
+            </details>
+
+            <details class="faq">
+                <summary>The login page opens a browser but never comes back to "Connected"</summary>
+                <p>
+                    The CLI's OAuth flow runs in a different process from the
+                    web UI. Give it up to 30 seconds after you approve. If it
+                    still shows "Login required":
+                </p>
+                <ul>
+                    <li>Reload <a href="/login">/login</a> to re-check status.</li>
+                    <li>Open a terminal and run <code>claude login</code>
+                        directly; some auth errors only show up there.</li>
+                    <li>Check the "Activity" panel on the /login page for
+                        the CLI's own stderr &mdash; it usually explains what
+                        went wrong.</li>
+                </ul>
+            </details>
+
+            <details class="faq">
+                <summary>"Session expired" or sudden auth failures mid-run</summary>
+                <p>
+                    Long-running pipelines occasionally hit a session timeout
+                    or rate-limit. Scribe saves per-section output as it goes,
+                    so:
+                </p>
+                <ul>
+                    <li>Go to <a href="/login">/login</a> and re-authenticate.</li>
+                    <li>Resume the run: for Write mode use
+                        <code>scribe resume &lt;project&gt;</code>; for Revise
+                        and Expand, just re-submit the job &mdash; the cached
+                        audit / plan is reused and only the missing sections
+                        re-run.</li>
+                </ul>
+            </details>
+
+            <details class="faq">
+                <summary>Is my Anthropic API key stored anywhere in Scribe?</summary>
+                <p>
+                    No. Scribe never reads or writes API keys. The Claude
+                    Code CLI handles all credentials in its own config
+                    (<code>~/.claude/</code> on macOS/Linux, the OS keychain
+                    on some setups). Scribe only launches the CLI as a
+                    subprocess and listens to its stdout.
+                </p>
+            </details>
+
+            <details class="faq">
+                <summary>I want to switch between multiple Anthropic accounts</summary>
+                <p>
+                    The CLI stores one active session at a time. In a terminal:
+                </p>
+<pre class="mono-block">claude logout
+claude login</pre>
+                <p>
+                    The second command asks you to sign into whichever account
+                    you want. Scribe will immediately reflect the new session
+                    the next time you hit <a href="/login">/login</a> or refresh.
+                </p>
+            </details>
+
+        </section>
+
         <section id="first-time" class="help-section">
             <h2>First-time setup</h2>
 
             <ol class="steps">
                 <li>
-                    <strong>Install the Claude Code CLI.</strong>
-                    See <a href="https://docs.claude.com/en/docs/claude-code/overview" target="_blank" rel="noopener">Anthropic's docs</a>
-                    (<code>brew install claude</code> on macOS). Scribe spawns
-                    Claude Code under the hood; without it, nothing will run.
-                </li>
-                <li>
-                    <strong>Check the connection indicator.</strong>
-                    The top-right of every page shows a dot:
-                    <span class="auth-dot auth-dot-ok" style="display: inline-block; margin: 0 4px;"></span> <em>Connected</em>,
-                    <span class="auth-dot auth-dot-warn" style="display: inline-block; margin: 0 4px;"></span> <em>Login required</em>,
-                    <span class="auth-dot auth-dot-err" style="display: inline-block; margin: 0 4px;"></span> <em>Install CLI</em>.
-                    Click it to sign in if required.
+                    <strong>Connect to Claude.</strong>
+                    See the <a href="#connect-claude">Connect to Claude</a>
+                    section above &mdash; install the CLI, log in, confirm the
+                    green "Connected" chip at the top-right of every Scribe
+                    page.
                 </li>
                 <li>
                     <strong>Pick a mode from the Dashboard</strong> and feed
-                    it the right input. See below.
+                    it the right input. See
+                    <a href="#which-mode">Which mode should I use?</a> below
+                    if you're not sure which one fits your situation.
+                </li>
+                <li>
+                    <strong>Watch the progress track.</strong> Every mode
+                    shows a 4-stage progress bar with live log; runs typically
+                    take 5&ndash;25 minutes depending on length and mode.
+                    Scribe saves per-section output as it goes, so if anything
+                    fails partway through you can resume or re-submit and
+                    only the missing sections re-run.
+                </li>
+                <li>
+                    <strong>Download the results</strong> as either formatted
+                    Word (<code>.docx</code>) or Markdown (<code>.md</code>).
+                    Both are written to your chosen output folder; the web UI
+                    also offers one-click downloads from the mode pages.
                 </li>
             </ol>
         </section>
@@ -683,11 +978,12 @@
             <details class="faq">
                 <summary>"Claude CLI not found" / "Login required"</summary>
                 <p>
-                    Scribe depends on the Claude Code CLI being installed and
-                    logged in. Install from
-                    <a href="https://docs.claude.com/en/docs/claude-code/overview" target="_blank" rel="noopener">Anthropic's docs</a>,
-                    then run <code>claude login</code> or click the auth chip
-                    in the top-right nav.
+                    See the <a href="#connect-claude">Connect to Claude</a>
+                    section for step-by-step install and login instructions
+                    for macOS, Windows, and Linux. The short version: install
+                    the CLI (or the Claude desktop app on Windows), then
+                    either click the auth chip in Scribe's top-right nav or
+                    run <code>claude login</code> in a terminal.
                 </p>
             </details>
 
