@@ -23,6 +23,7 @@ dependencies = [
 
 [project.scripts]
 scribe = "scribe.cli:app"
+scribe-desktop = "scribe.launcher:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/scribe"]

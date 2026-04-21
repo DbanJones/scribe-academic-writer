@@ -27,6 +27,7 @@
             <a href="#writing-rules">Writing rules applied</a>
             <a href="#outputs">Output formats</a>
             <a href="#cli">CLI reference</a>
+            <a href="#share">Share Scribe with others</a>
         </div>
         <div class="toc-section">
             <h4>Troubleshooting</h4>
@@ -939,6 +940,156 @@ claude login</pre>
                     </tr>
                 </tbody>
             </table>
+        </section>
+
+        <!-- ================================================================ -->
+        <!--  SHARE                                                            -->
+        <!-- ================================================================ -->
+
+        <section id="share" class="help-section">
+            <h2>Share Scribe with other users</h2>
+            <p>
+                Scribe runs locally on each user's machine, so "sharing" means
+                getting the code installed on their computer. There are three
+                routes, from most polished to most developer-friendly.
+            </p>
+            <p class="muted small">
+                <strong>Shared requirement:</strong> every user still needs
+                the Claude Code CLI installed with their own Anthropic account
+                logged in. Scribe never runs anything against a shared server;
+                each user pays for their own Claude usage.
+            </p>
+
+            <div class="mode-picker-grid">
+                <div class="picker-card">
+                    <h4>A. Windows .exe (no Python knowledge)</h4>
+                    <p class="muted small">
+                        Send them a zipped folder containing <code>Scribe.exe</code>
+                        plus bundled Python runtime. They unzip, double-click,
+                        browser opens.
+                    </p>
+                    <ul style="font-size: 0.84rem; color: var(--text-dim); padding-left: 1.1rem; margin: 0.25rem 0 0.5rem;">
+                        <li>~300 MB unzipped, ~100 MB zipped</li>
+                        <li>Will trigger Windows SmartScreen unless signed</li>
+                        <li>Rebuild and resend the zip when you update</li>
+                    </ul>
+                </div>
+
+                <div class="picker-card">
+                    <h4>B. <code>pipx install</code> (technical users)</h4>
+                    <p class="muted small">
+                        Your colleague runs one command; they get the
+                        <code>scribe</code> and <code>scribe-desktop</code>
+                        commands on their PATH. Updates via
+                        <code>pipx upgrade scribe</code>.
+                    </p>
+                    <ul style="font-size: 0.84rem; color: var(--text-dim); padding-left: 1.1rem; margin: 0.25rem 0 0.5rem;">
+                        <li>~30 MB install, cross-platform</li>
+                        <li>Requires Python 3.11+ and pipx</li>
+                        <li>Works everywhere (macOS, Windows, Linux)</li>
+                    </ul>
+                </div>
+
+                <div class="picker-card">
+                    <h4>C. Clone the repo (contributors)</h4>
+                    <p class="muted small">
+                        For people who will customise Scribe. They get the
+                        source tree, can change prompts, add citation styles,
+                        and so on.
+                    </p>
+                    <ul style="font-size: 0.84rem; color: var(--text-dim); padding-left: 1.1rem; margin: 0.25rem 0 0.5rem;">
+                        <li>Requires git + Python toolchain</li>
+                        <li>Best for anyone who will edit Scribe itself</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h3>A &mdash; Build a Windows .exe</h3>
+
+            <p>
+                Build the packaged executable from the repo. Run once on
+                Windows:
+            </p>
+
+<pre class="mono-block">pip install pyinstaller
+python scripts/build_exe.py              # onedir build (recommended)
+python scripts/build_exe.py --onefile    # single-file exe, slower launch
+</pre>
+
+            <p>
+                Output goes to <code>dist/Scribe/</code> (a folder containing
+                <code>Scribe.exe</code> and its runtime). Zip the whole folder
+                and hand it to your colleague. They:
+            </p>
+
+            <ol class="steps">
+                <li>Install the Claude Code CLI once (Claude desktop app from
+                    <a href="https://claude.ai/download" target="_blank" rel="noopener">claude.ai/download</a>
+                    is the easiest route on Windows).</li>
+                <li>Unzip your folder anywhere (Documents, Desktop, etc.).</li>
+                <li>Double-click <code>Scribe.exe</code>. A console window
+                    opens, the Flask server starts on a free port, and the
+                    browser opens to Scribe's dashboard automatically.</li>
+                <li>Close the console window (or press Ctrl+C) to shut down.</li>
+            </ol>
+
+            <div class="flash flash-warn" style="margin-top: 1rem;">
+                <strong>Windows SmartScreen:</strong> an unsigned exe may
+                show "Windows protected your PC" on first launch. Recipients
+                click <em>More info</em> &rarr; <em>Run anyway</em>. For a
+                one-click experience on a wider audience, sign the exe with
+                an Authenticode code-signing certificate (they're ~&pound;100/year
+                from providers like Sectigo or DigiCert).
+            </div>
+
+            <h3>B &mdash; <code>pipx install</code> from GitHub</h3>
+
+            <p>
+                For colleagues comfortable with a terminal, this is lighter
+                and easier to keep up to date. Prerequisites: Python 3.11+
+                and <a href="https://pipx.pypa.io/stable/" target="_blank" rel="noopener">pipx</a>.
+                Then:
+            </p>
+
+<pre class="mono-block">pipx install git+https://github.com/DbanJones/scribe-academic-writer.git
+
+scribe-desktop      # launches the web UI in the browser
+scribe --help       # CLI equivalent
+</pre>
+
+            <p>
+                To update when you push changes:
+            </p>
+
+<pre class="mono-block">pipx upgrade scribe</pre>
+
+            <h3>C &mdash; Clone the repo</h3>
+
+            <p>
+                For anyone who will edit the prompts, add citation styles,
+                or run tests:
+            </p>
+
+<pre class="mono-block">git clone https://github.com/DbanJones/scribe-academic-writer.git
+cd scribe-academic-writer
+pip install -e .
+scribe web
+</pre>
+
+            <h3>Sharing caveats</h3>
+
+            <p class="muted small">
+                <strong>Keep in mind:</strong> each user runs their own copy
+                of Scribe against their own Claude account. There is no
+                central server, no shared queue, no centralised billing.
+                Projects live on each user's disk.
+            </p>
+            <p class="muted small">
+                If you want multiple people to collaborate on the same
+                document, the cleanest pattern is one of you running Scribe,
+                the other reviewing the markdown or Word output (e.g. via
+                git, OneDrive, or email). Scribe itself is a single-user tool.
+            </p>
         </section>
 
         <!-- ================================================================ -->

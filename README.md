@@ -16,13 +16,67 @@ Every stage receives the thesis analysis from Stage 1, ensuring each section mai
 
 ## Install
 
+Three ways in, from most user-friendly to most developer-friendly.
+
+### Option A -- Windows executable (non-technical users)
+
+1. Download the latest `Scribe-Windows.zip` from the [Releases](https://github.com/DbanJones/scribe-academic-writer/releases) page.
+2. Unzip it anywhere (e.g. `Documents/Scribe/`).
+3. Double-click `Scribe.exe`. A console window shows the local URL and
+   your browser opens automatically.
+
+The executable bundles Python and all of Scribe's code, but you still need
+the Claude Code CLI separately -- Scribe's launcher detects if it's missing
+and prints install instructions.
+
+### Option B -- `pipx install` (technical users, cross-platform)
+
 ```bash
-pip install -e .
+pipx install git+https://github.com/DbanJones/scribe-academic-writer.git
+
+scribe-desktop   # launches the web UI in your browser
+scribe --help    # CLI equivalent
 ```
 
-Requires:
-- Python 3.11+
-- Claude Code CLI (via Max subscription or Claude desktop app)
+Requires Python 3.11+. `pipx` isolates Scribe from your system Python.
+
+### Option C -- develop from source
+
+```bash
+git clone https://github.com/DbanJones/scribe-academic-writer.git
+cd scribe-academic-writer
+pip install -e .
+scribe web
+```
+
+### Requirement shared by all three routes
+
+- **Claude Code CLI** (via Max subscription or per-token API access).
+  See the [Connect to Claude guide](#connect-to-claude) below.
+
+## Connect to Claude
+
+Scribe uses your **local** Claude Code CLI for every API call. Your documents
+never leave your machine; usage is billed to your own Anthropic account or
+Max subscription.
+
+1. **Install the CLI.**
+   - macOS: `brew install claude`
+   - Windows: install the Claude desktop app from https://claude.ai/download
+     (bundles the CLI), or `npm install -g @anthropic-ai/claude-code`
+   - Linux: `npm install -g @anthropic-ai/claude-code`
+
+2. **Launch Scribe** and open the web UI. The top-right nav shows a status
+   chip:
+   - Green "Connected" -- ready to go.
+   - Amber "Login required" -- click it, press "Login with Claude", sign
+     in in your browser.
+   - Red "Install CLI" -- see step 1.
+
+3. **Or log in from a terminal:** `claude login`. Scribe picks up the
+   session automatically.
+
+Full setup walkthrough, including troubleshooting, lives at `/help#connect-claude` in the web UI.
 
 ## Quick start
 
@@ -128,6 +182,62 @@ git:
 | `scribe visuals <dir>` | List visual suggestion placeholders |
 | `scribe history <dir>` | List past runs |
 | `scribe web` | Launch the web UI |
+| `scribe restyle <file> --style <id>` | Restyle citations + references in a .md or .docx to a target style |
+| `scribe list-styles` | List available citation styles |
+
+## Citation restyling
+
+Scribe ships a standalone citation engine that can convert any paper to a
+target style without rewriting the prose.
+
+```bash
+# Convert a paper's citations to APA
+scribe restyle paper.docx --style apa
+
+# Use a journal house style
+scribe restyle paper.md --style nature
+
+# Target a custom preset with extra free-text rules
+scribe restyle paper.docx --style custom:my-thesis-style \
+    --rules "abbreviate months; DOIs on separate line"
+```
+
+Built-in styles: `harvard`, `ieee`, `apa`, `vancouver`, `chicago-author-date`,
+`nature`, `science`, `jcp` (Journal of Cleaner Production), `jie` (Journal of
+Industrial Ecology), `applied-energy`, `energy-policy`, `ieee-proceedings`.
+
+Build your own style (form-driven, with a live preview and free-text rules)
+from the **Restyle** page in the web UI. Saved presets live in
+`src/scribe/citations/styles/custom/`.
+
+## Building a Windows .exe to share
+
+If you want to hand Scribe to a colleague who doesn't use Python, build
+a standalone Windows bundle:
+
+```bash
+pip install pyinstaller
+python scripts/build_exe.py                # onedir build (recommended)
+python scripts/build_exe.py --onefile      # single-file exe, slower to launch
+```
+
+Output goes to `dist/Scribe/`. Zip that folder and send it -- your
+colleague unzips it and double-clicks `Scribe.exe`.
+
+A few things to know before you distribute:
+
+- **Size:** ~300 MB unzipped, ~100 MB zipped. That's Python + all deps.
+- **Claude CLI:** not bundled. The launcher detects if it's missing and
+  shows install instructions on first run.
+- **Windows SmartScreen:** an unsigned exe may trigger a "Windows protected
+  your PC" warning. Recipients click "More info" -> "Run anyway". For a
+  polished distribution, sign the exe with an Authenticode certificate.
+- **Updates:** send a new zip when you rebuild. Users swap the folder; no
+  installer to uninstall.
+
+For technical colleagues, `pipx install git+<repo>` is lighter: they get
+a 30 MB install, automatic updates via `pipx upgrade scribe`, and the
+`scribe` / `scribe-desktop` commands on their PATH.
 
 ## Stack
 
@@ -136,3 +246,4 @@ git:
 - `pydantic` (models), `pyyaml` (config)
 - `pymupdf` (PDF), `python-docx` (DOCX), `openpyxl` (XLSX)
 - `gitpython` (version history), `tiktoken` (token estimation)
+- `pyinstaller` (build toolchain for the desktop .exe)
